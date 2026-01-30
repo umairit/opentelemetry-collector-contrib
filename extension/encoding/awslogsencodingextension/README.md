@@ -16,8 +16,7 @@ This extension unmarshalls logs encoded in formats produced by AWS services.
 
 This extension unmarshals logs encoded in formats produced by AWS services, including:
  - [Amazon CloudWatch Logs Subscription Filters](https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/SubscriptionFilters.html).
- - [VPC flow log records](https://docs.aws.amazon.com/vpc/latest/userguide/flow-log-records.html) sent to S3 in plain text.
-   - Parquet support still to be added.
+ - [VPC flow log records](https://docs.aws.amazon.com/vpc/latest/userguide/flow-log-records.html) sent to S3 in plain text or Parquet format.
  - [S3 access log records](https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html).
  - [AWS CloudTrail logs](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-log-file-examples.html).
 - ELB access logs:
@@ -47,7 +46,6 @@ extensions:
     format: vpcflow
     vpcflow:
       # options [parquet, plain-text]. 
-      # parquet option still needs to be implemented.
       file_format: plain-text 
       # Optional: format of the VPC flow log. Used when processing VPC flow logs arriving through CloudWatch Logs subscription filters. 
       # Ignored when decoding VPC flow logs sent to S3, which include the format as a file header.
@@ -191,6 +189,7 @@ The table below summarizes streaming support details for each log type, along wi
 | S3 Access Logs      | -                              | Bytes processed             |                                                                                                                       |
 | Subscription filter | -                              | Number of records processed | Supports processing multi-line inputs and offset tracks number of records that get processed                          |
 | VPC Flow Logs       | S3 plain text                  | Bytes processed             |                                                                                                                       |
+| VPC Flow Logs       | S3 Parquet                     | Rows processed              | If the reader implements `io.ReaderAt` (plus `io.Seeker` or `Size() int64`), the file is opened without full buffering |
 | VPC Flow Logs       | CloudWatch subscription filter | Bytes processed             | If non-zero offset is given, then invocation returns EOF with an empty log. The offset carries the full record length |
 | WAF Logs            | -                              | Bytes processed             |                                                                                                                       |
 
