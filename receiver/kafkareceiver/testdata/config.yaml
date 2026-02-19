@@ -31,9 +31,9 @@ kafka/logs:
       username: user
       password: password
   tls:
-    ca_file: ca.pem
-    cert_file: cert.pem
-    key_file: key.pem
+    ca_file: testdata/ca.pem
+    cert_file: testdata/cert.pem
+    key_file: testdata/key.pem
   metadata:
     retry:
       max: 10
@@ -61,6 +61,13 @@ kafka/message_marking_on_permanent_error_inherited:
   message_marking:
     after: true
     on_error: true
+
+kafka/invalid_franz:
+  session_timeout: 1ms
+  logs:
+    topics:
+    - logs
+    encoding: otlp_proto
 
 kafka/regex_topic_with_exclusion:
   logs:

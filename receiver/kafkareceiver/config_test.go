@@ -4,6 +4,7 @@
 package kafkareceiver
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -84,9 +85,9 @@ func TestLoadConfig(t *testing.T) {
 					}
 					config.TLS = &configtls.ClientConfig{
 						Config: configtls.Config{
-							CAFile:   "ca.pem",
-							CertFile: "cert.pem",
-							KeyFile:  "key.pem",
+							CAFile:   "testdata/ca.pem",
+							CertFile: "testdata/cert.pem",
+							KeyFile:  "testdata/key.pem",
 						},
 					}
 					return config
@@ -306,6 +307,10 @@ func TestLoadConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			id:          component.NewIDWithName(metadata.Type, "invalid_franz"),
+			expectedErr: errors.New("session timeout 1ms is less than allowed 100ms"),
+		},
 	}
 
 	for _, tt := range tests {
@@ -317,8 +322,12 @@ func TestLoadConfig(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, sub.Unmarshal(cfg))
 
-			assert.NoError(t, xconfmap.Validate(cfg))
-			assert.Equal(t, tt.expected, cfg)
+			if tt.expectedErr != nil {
+				assert.ErrorContains(t, xconfmap.Validate(cfg), tt.expectedErr.Error())
+			} else {
+				assert.NoError(t, xconfmap.Validate(cfg))
+				assert.Equal(t, tt.expected, cfg)
+			}
 		})
 	}
 }
@@ -332,6 +341,8 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "valid config with regex and exclude_topic",
 			config: &Config{
+				ClientConfig:   configkafka.NewDefaultClientConfig(),
+				ConsumerConfig: configkafka.NewDefaultConsumerConfig(),
 				Logs: TopicEncodingConfig{
 					Topics:        []string{"^logs-.*"},
 					ExcludeTopics: []string{"^logs-test$"},
@@ -409,6 +420,8 @@ func TestConfigValidate(t *testing.T) {
 		{
 			name: "valid config without exclude_topic",
 			config: &Config{
+				ClientConfig:   configkafka.NewDefaultClientConfig(),
+				ConsumerConfig: configkafka.NewDefaultConsumerConfig(),
 				Logs: TopicEncodingConfig{
 					Topics:   []string{"logs"},
 					Encoding: "otlp_proto",
