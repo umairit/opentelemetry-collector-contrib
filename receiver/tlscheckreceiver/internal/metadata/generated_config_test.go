@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
@@ -27,7 +28,9 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
 					TlscheckTimeLeft: MetricConfig{
-						Enabled: true,
+						Enabled:             true,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []string{"tlscheck.x509.issuer", "tlscheck.x509.cn", "tlscheck.x509.san"},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
@@ -40,7 +43,9 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
 					TlscheckTimeLeft: MetricConfig{
-						Enabled: false,
+						Enabled:             false,
+						AggregationStrategy: AggregationStrategyAvg,
+						EnabledAttributes:   []string{"tlscheck.x509.issuer", "tlscheck.x509.cn", "tlscheck.x509.san"},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
