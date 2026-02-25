@@ -35,10 +35,10 @@ type metricInfo struct {
 }
 
 type metricTlscheckTimeLeft struct {
-	data          pmetric.Metric // data buffer for generated metric.
-	config        MetricConfig   // metric config provided by user.
-	capacity      int            // max observed number of data points added to the metric.
-	aggDataPoints []int64        // slice containing number of aggregated datapoints at each index
+	data          pmetric.Metric         // data buffer for generated metric.
+	config        TlscheckTimeLeftConfig // metric config provided by user.
+	capacity      int                    // max observed number of data points added to the metric.
+	aggDataPoints []int64                // slice containing number of aggregated datapoints at each index
 }
 
 // init fills tlscheck.time_left metric with initial data.
@@ -59,13 +59,13 @@ func (m *metricTlscheckTimeLeft) recordDataPoint(start pcommon.Timestamp, ts pco
 	dp := pmetric.NewNumberDataPoint()
 	dp.SetStartTimestamp(start)
 	dp.SetTimestamp(ts)
-	if slices.Contains(m.config.EnabledAttributes, "tlscheck.x509.issuer") {
+	if slices.Contains(m.config.EnabledAttributes, TlscheckTimeLeftAttributeKeyTlscheckX509Issuer) {
 		dp.Attributes().PutStr("tlscheck.x509.issuer", tlscheckX509IssuerAttributeValue)
 	}
-	if slices.Contains(m.config.EnabledAttributes, "tlscheck.x509.cn") {
+	if slices.Contains(m.config.EnabledAttributes, TlscheckTimeLeftAttributeKeyTlscheckX509Cn) {
 		dp.Attributes().PutStr("tlscheck.x509.cn", tlscheckX509CnAttributeValue)
 	}
-	if slices.Contains(m.config.EnabledAttributes, "tlscheck.x509.san") {
+	if slices.Contains(m.config.EnabledAttributes, TlscheckTimeLeftAttributeKeyTlscheckX509San) {
 		dp.Attributes().PutEmptySlice("tlscheck.x509.san").FromRaw(tlscheckX509SanAttributeValue)
 	}
 
@@ -119,7 +119,7 @@ func (m *metricTlscheckTimeLeft) emit(metrics pmetric.MetricSlice) {
 	}
 }
 
-func newMetricTlscheckTimeLeft(cfg MetricConfig) metricTlscheckTimeLeft {
+func newMetricTlscheckTimeLeft(cfg TlscheckTimeLeftConfig) metricTlscheckTimeLeft {
 	m := metricTlscheckTimeLeft{config: cfg}
 
 	if cfg.Enabled {

@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
+
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/confmap/confmaptest"
 )
@@ -26,10 +27,10 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "all_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					TlscheckTimeLeft: MetricConfig{
+					TlscheckTimeLeft: TlscheckTimeLeftConfig{
 						Enabled:             true,
 						AggregationStrategy: AggregationStrategyAvg,
-						EnabledAttributes:   []string{"tlscheck.x509.issuer", "tlscheck.x509.cn", "tlscheck.x509.san"},
+						EnabledAttributes:   []TlscheckTimeLeftAttributeKey{TlscheckTimeLeftAttributeKeyTlscheckX509Issuer, TlscheckTimeLeftAttributeKeyTlscheckX509Cn, TlscheckTimeLeftAttributeKeyTlscheckX509San},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
@@ -41,10 +42,10 @@ func TestMetricsBuilderConfig(t *testing.T) {
 			name: "none_set",
 			want: MetricsBuilderConfig{
 				Metrics: MetricsConfig{
-					TlscheckTimeLeft: MetricConfig{
+					TlscheckTimeLeft: TlscheckTimeLeftConfig{
 						Enabled:             false,
 						AggregationStrategy: AggregationStrategyAvg,
-						EnabledAttributes:   []string{"tlscheck.x509.issuer", "tlscheck.x509.cn", "tlscheck.x509.san"},
+						EnabledAttributes:   []TlscheckTimeLeftAttributeKey{TlscheckTimeLeftAttributeKeyTlscheckX509Issuer, TlscheckTimeLeftAttributeKeyTlscheckX509Cn, TlscheckTimeLeftAttributeKeyTlscheckX509San},
 					},
 				},
 				ResourceAttributes: ResourceAttributesConfig{
@@ -56,7 +57,7 @@ func TestMetricsBuilderConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := loadMetricsBuilderConfig(t, tt.name)
-			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(MetricConfig{}, ResourceAttributeConfig{}))
+			diff := cmp.Diff(tt.want, cfg, cmpopts.IgnoreUnexported(TlscheckTimeLeftConfig{}, ResourceAttributeConfig{}))
 			require.Emptyf(t, diff, "Config mismatch (-expected +actual):\n%s", diff)
 		})
 	}

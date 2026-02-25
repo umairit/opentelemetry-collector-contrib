@@ -11,6 +11,26 @@ $defs:
           enabled:
             type: boolean
             default: true
+          aggregation_strategy:
+            type: string
+            enum:
+              - "sum"
+              - "avg"
+              - "min"
+              - "max"
+            default: "avg"
+          attributes:
+            type: array
+            items:
+              type: string
+              enum:
+                - "tlscheck.x509.issuer"
+                - "tlscheck.x509.cn"
+                - "tlscheck.x509.san"
+            default:
+              - "tlscheck.x509.issuer"
+              - "tlscheck.x509.cn"
+              - "tlscheck.x509.san"
   resource_attributes_config:
     description: ResourceAttributesConfig provides config for tlscheck resource attributes.
     type: object
