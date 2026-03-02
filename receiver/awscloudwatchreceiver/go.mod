@@ -6,6 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.2
 	github.com/aws/aws-sdk-go-v2/config v1.32.10
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.63.2
+	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7
 	github.com/goccy/go-json v0.10.5
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden v0.146.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/pdatatest v0.146.0
@@ -37,7 +38,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.11 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.15 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7 // indirect
 	github.com/aws/smithy-go v1.24.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
