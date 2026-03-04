@@ -6,6 +6,7 @@ package lambda // import "github.com/open-telemetry/opentelemetry-collector-cont
 import (
 	"context"
 	"os"
+	"runtime"
 
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/processor"
@@ -19,6 +20,10 @@ import (
 const (
 	// TypeStr is type of detector.
 	TypeStr = "lambda"
+
+	// accountIDSymlinkPath is the path to a symlink whose target is the AWS account ID.
+	// This symlink is created by the opentelemetry-lambda extension layer.
+	accountIDSymlinkPath = "/tmp/.otel-aws-account-id"
 
 	// Environment variables that are set when running on AWS Lambda.
 	// https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html#configuration-envvars-runtime
@@ -54,6 +59,14 @@ func (d *detector) Detect(_ context.Context) (resource pcommon.Resource, schemaU
 	d.rb.SetCloudPlatform(conventions.CloudPlatformAWSLambda.Value.AsString())
 	if value, ok := os.LookupEnv(awsRegionEnvVar); ok {
 		d.rb.SetCloudRegion(value)
+	}
+	// The account ID symlink is only available on Linux (Lambda does not support Windows).
+	if runtime.GOOS != "windows" {
+		if accountID, err := os.Readlink(accountIDSymlinkPath); err == nil {
+			d.rb.SetCloudAccountID(accountID)
+		} else {
+			d.logger.Debug("cloud.account.id not available via symlink", zap.Error(err))
+		}
 	}
 
 	// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/resource/semantic_conventions/faas.md

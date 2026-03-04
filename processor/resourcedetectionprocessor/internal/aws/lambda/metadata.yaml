@@ -11,6 +11,10 @@ resource_attributes:
     description: The aws.log.stream.names
     type: slice
     enabled: true
+  cloud.account.id:
+    description: The cloud account id
+    type: string
+    enabled: true
   cloud.platform:
     description: The cloud.platform
     type: string
