@@ -162,13 +162,13 @@ func TestTimeoutPrecedence(t *testing.T) {
 
 	tests := []struct {
 		name                      string
-		configMap                 map[string]interface{}
+		configMap                 map[string]any
 		expectedExporterTimeout   time.Duration
 		expectedHTTPClientTimeout time.Duration
 	}{
 		{
 			name: "only_timeout_set",
-			configMap: map[string]interface{}{
+			configMap: map[string]any{
 				"timeout":  "5s",
 				"endpoint": "http://example.com:9009",
 			},
@@ -177,7 +177,7 @@ func TestTimeoutPrecedence(t *testing.T) {
 		},
 		{
 			name: "only_exporter_timeout_set",
-			configMap: map[string]interface{}{
+			configMap: map[string]any{
 				"exporter_timeout": "10s",
 				"endpoint":         "http://example.com:9009",
 			},
@@ -186,7 +186,7 @@ func TestTimeoutPrecedence(t *testing.T) {
 		},
 		{
 			name: "both_timeout_and_exporter_timeout_set",
-			configMap: map[string]interface{}{
+			configMap: map[string]any{
 				"timeout":          "5s",
 				"exporter_timeout": "10s",
 				"endpoint":         "http://example.com:9009",
