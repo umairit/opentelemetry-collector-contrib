@@ -40,15 +40,15 @@ properties:
   disable_scope_info:
     description: DisableScopeInfo allows disabling the export of the scope info labels
     type: boolean
+  exporter_timeout:
+    description: ExporterTimeout specifies the timeout for the exporter operations. When set, this value takes precedence over the timeout field for exporter timeout. This field allows independent configuration of exporter timeout and HTTP client timeout. If not set, the timeout field is used for the exporter timeout (backward compatible behavior).
+    type: string
+    format: duration
   external_labels:
     description: ExternalLabels defines a map of label keys and values that are allowed to start with reserved prefix "__"
     type: object
     additionalProperties:
       type: string
-  exporter_timeout:
-    description: Timeout for exporter operations. When set, overrides the exporter timeout independently from HTTP client timeout.
-    type: string
-    format: duration
   max_batch_request_parallelism:
     description: maximum amount of parallel requests to do when handling large batch request
     x-pointer: true
