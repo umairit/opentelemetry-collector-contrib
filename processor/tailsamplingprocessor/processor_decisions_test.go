@@ -16,6 +16,8 @@ import (
 	"go.opentelemetry.io/collector/processor/processortest"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor/cache"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/processor/tailsamplingprocessor/internal/metadata"
@@ -919,4 +921,74 @@ func TestRateLimiter(t *testing.T) {
 
 	require.LessOrEqual(t, len(sampledTraceIDs), 2)
 	require.GreaterOrEqual(t, len(sampledTraceIDs), 1)
+}
+
+// Regression test for https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/46800
+func TestLateArrivingSpanDroppedDecisionNoWarning(t *testing.T) {
+	nextConsumer := new(consumertest.TracesSink)
+	controller := newTestTSPController()
+
+	mpe := &mockPolicyEvaluator{}
+	policies := []*policy{
+		{name: "mock-policy-1", evaluator: mpe, attribute: metric.WithAttributes(attribute.String("policy", "mock-policy-1"))},
+	}
+
+	cfg := Config{
+		DecisionWait: defaultTestDecisionWait,
+		NumTraces:    defaultNumTraces,
+		Options: []Option{
+			withTestController(controller),
+			withPolicies(policies),
+		},
+	}
+
+	zc, observedLogs := observer.New(zap.WarnLevel)
+	settings := processortest.NewNopSettings(metadata.Type)
+	settings.Logger = zap.New(zc)
+
+	p, err := newTracesProcessor(t.Context(), settings, nextConsumer, cfg)
+	require.NoError(t, err)
+
+	require.NoError(t, p.Start(t.Context(), componenttest.NewNopHost()))
+	defer func(p processor.Traces) {
+		require.NoError(t, p.Shutdown(t.Context()))
+	}(p)
+
+	traceID := uInt64ToTraceID(1)
+	mpe.NextDecision = samplingpolicy.Dropped
+
+	spanIndexToTraces := func(spanIndex uint64) ptrace.Traces {
+		traces := ptrace.NewTraces()
+		span := traces.ResourceSpans().AppendEmpty().ScopeSpans().AppendEmpty().Spans().AppendEmpty()
+		span.SetTraceID(traceID)
+		span.SetSpanID(uInt64ToSpanID(spanIndex))
+		return traces
+	}
+
+	require.NoError(t, p.ConsumeTraces(t.Context(), spanIndexToTraces(1)))
+
+	// First tick: no-op; second tick: triggers policy evaluation
+	controller.waitForTick()
+	require.Equal(t, 0, mpe.EvaluationCount)
+	controller.waitForTick()
+	require.Equal(t, 1, mpe.EvaluationCount)
+
+	// Decision is Dropped -> nothing forwarded
+	require.Equal(t, 0, nextConsumer.SpanCount())
+
+	// Send a late-arriving span for the same trace
+	require.NoError(t, p.ConsumeTraces(t.Context(), spanIndexToTraces(2)))
+
+	// Allow the processor goroutine to handle the late span
+	controller.waitForTick()
+
+	// Policy must NOT be re-evaluated
+	require.Equal(t, 1, mpe.EvaluationCount)
+
+	// Late span must NOT be forwarded
+	require.Equal(t, 0, nextConsumer.SpanCount(), "dropped trace should not forward late-arriving spans")
+
+	unexpectedWarnings := observedLogs.FilterMessage("Unexpected sampling decision")
+	assert.Equal(t, 0, unexpectedWarnings.Len(),
+		"Dropped decision must not produce 'Unexpected sampling decision' warning")
 }

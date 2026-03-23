@@ -1,0 +1,6 @@
+change_type: bug_fix
+component: processor/tail_sampling
+note: Handle `Dropped` sampling decision for late-arriving spans instead of logging spurious "Unexpected sampling decision" warning.
+issues: [46800]
+subtext:
+change_logs: []

@@ -815,7 +815,7 @@ func (tsp *tailSamplingSpanProcessor) processTrace(id pcommon.TraceID, rss ptrac
 		traceTd := ptrace.NewTraces()
 		appendToTraces(traceTd, rss)
 		tsp.forwardSpans(tsp.ctx, traceTd)
-	case samplingpolicy.NotSampled:
+	case samplingpolicy.NotSampled, samplingpolicy.Dropped:
 		// TODO: I don't think this is correct? If it isn't sampled shouldn't we just do nothing?
 		tsp.releaseNotSampledTrace(id, actualData)
 	default:
