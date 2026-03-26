@@ -4,6 +4,7 @@
 package config // import "github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector/config"
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
@@ -14,6 +15,10 @@ import (
 	"go.opentelemetry.io/collector/config/configoptional"
 	"go.opentelemetry.io/collector/confmap"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog"
+	"go.opentelemetry.io/collector/pdata/pmetric"
+	"go.opentelemetry.io/collector/pdata/pprofile"
+	"go.opentelemetry.io/collector/pdata/ptrace"
 	"go.uber.org/zap"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector/internal/customottl"
@@ -32,6 +37,7 @@ const (
 	// error of less than 5%.
 	// Ref: https://opentelemetry.io/docs/specs/otel/metrics/sdk/#base2-exponential-bucket-histogram-aggregation
 	defaultExponentialHistogramMaxSize = 160
+
 )
 
 var defaultHistogramBuckets = []float64{
@@ -73,60 +79,68 @@ func (c *Config) Validate() error {
 	var multiError error // collect all errors at once
 	if len(c.Spans) > 0 {
 		parser, err := ottlspan.NewParser(
-			customottl.SpanFuncs(),
+			c.SpanParserFuncs(),
 			component.TelemetrySettings{Logger: zap.NewNop()},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create parser for OTTL spans: %w", err)
 		}
+		synCtx := syntheticSpanCtx()
+		defer synCtx.Close()
 		for i := range c.Spans {
 			span := &c.Spans[i]
-			if err := validateMetricInfo(span, parser); err != nil {
+			if err := validateMetricInfo(span, parser, synCtx); err != nil {
 				multiError = errors.Join(multiError, fmt.Errorf("failed to validate spans configuration: %w", err))
 			}
 		}
 	}
 	if len(c.Datapoints) > 0 {
 		parser, err := ottldatapoint.NewParser(
-			customottl.DatapointFuncs(),
+			c.DatapointParserFuncs(),
 			component.TelemetrySettings{Logger: zap.NewNop()},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create parser for OTTL datapoints: %w", err)
 		}
+		synCtx := syntheticDatapointCtx()
+		defer synCtx.Close()
 		for i := range c.Datapoints {
 			dp := &c.Datapoints[i]
-			if err := validateMetricInfo(dp, parser); err != nil {
+			if err := validateMetricInfo(dp, parser, synCtx); err != nil {
 				multiError = errors.Join(multiError, fmt.Errorf("failed to validate datapoints configuration: %w", err))
 			}
 		}
 	}
 	if len(c.Logs) > 0 {
 		parser, err := ottllog.NewParser(
-			customottl.LogFuncs(),
+			c.LogParserFuncs(),
 			component.TelemetrySettings{Logger: zap.NewNop()},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create parser for OTTL logs: %w", err)
 		}
+		synCtx := syntheticLogCtx()
+		defer synCtx.Close()
 		for i := range c.Logs {
 			log := &c.Logs[i]
-			if err := validateMetricInfo(log, parser); err != nil {
+			if err := validateMetricInfo(log, parser, synCtx); err != nil {
 				multiError = errors.Join(multiError, fmt.Errorf("failed to validate logs configuration: %w", err))
 			}
 		}
 	}
 	if len(c.Profiles) > 0 {
 		parser, err := ottlprofile.NewParser(
-			customottl.ProfileFuncs(),
+			c.ProfileParserFuncs(),
 			component.TelemetrySettings{Logger: zap.NewNop()},
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create parser for OTTL profiles: %w", err)
 		}
+		synCtx := syntheticProfileCtx()
+		defer synCtx.Close()
 		for i := range c.Profiles {
 			profile := &c.Profiles[i]
-			if err := validateMetricInfo(profile, parser); err != nil {
+			if err := validateMetricInfo(profile, parser, synCtx); err != nil {
 				multiError = errors.Join(multiError, fmt.Errorf("failed to validate profiles configuration: %w", err))
 			}
 		}
@@ -204,6 +218,17 @@ type Gauge struct {
 	_ struct{}
 }
 
+// DynamicResourceAttributes configures a dynamic OTTL expression for
+// selecting resource attributes at runtime.
+type DynamicResourceAttributes struct {
+	// Statement is an OTTL value expression that must evaluate to a
+	// pcommon.Map. The resulting key-value pairs are merged into the
+	// metric's resource attributes.
+	Statement string `mapstructure:"statement"`
+	// prevent unkeyed literal initialization
+	_ struct{}
+}
+
 // MetricInfo defines the structure of the metric produced by the connector.
 type MetricInfo struct {
 	Name        string `mapstructure:"name"`
@@ -218,11 +243,16 @@ type MetricInfo struct {
 	Attributes                []Attribute `mapstructure:"attributes"`
 	// Conditions are a set of OTTL conditions which are ORed. Data is
 	// processed into metrics only if the sequence evaluates to true.
-	Conditions           []string                                      `mapstructure:"conditions"`
-	Histogram            configoptional.Optional[Histogram]            `mapstructure:"histogram"`
-	ExponentialHistogram configoptional.Optional[ExponentialHistogram] `mapstructure:"exponential_histogram"`
-	Sum                  configoptional.Optional[Sum]                  `mapstructure:"sum"`
-	Gauge                configoptional.Optional[Gauge]                `mapstructure:"gauge"`
+	Conditions []string `mapstructure:"conditions"`
+	// DynamicResourceAttributes configures an optional OTTL value
+	// expression whose result (a pcommon.Map) is merged into the
+	// metric's resource attributes alongside the statically configured
+	// IncludeResourceAttributes.
+	DynamicResourceAttributes *DynamicResourceAttributes                    `mapstructure:"dynamic_resource_attributes"`
+	Histogram                 configoptional.Optional[Histogram]            `mapstructure:"histogram"`
+	ExponentialHistogram      configoptional.Optional[ExponentialHistogram] `mapstructure:"exponential_histogram"`
+	Sum                       configoptional.Optional[Sum]                  `mapstructure:"sum"`
+	Gauge                     configoptional.Optional[Gauge]                `mapstructure:"gauge"`
 	// prevent unkeyed literal initialization
 	_ struct{}
 }
@@ -241,24 +271,42 @@ func (mi *MetricInfo) ensureDefaults() {
 	}
 }
 
+func (mi *MetricInfo) validateIncludeResourceAttributes() error {
+	tmp := pcommon.NewValueEmpty()
+	duplicate := map[string]struct{}{}
+	for _, attr := range mi.IncludeResourceAttributes {
+		if err := validateAttribute(attr, tmp, duplicate); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (mi *MetricInfo) validateAttributes() error {
 	tmp := pcommon.NewValueEmpty()
 	duplicate := map[string]struct{}{}
 	for _, attr := range mi.Attributes {
-		if attr.Key == "" {
-			return errors.New("attribute key missing")
+		if err := validateAttribute(attr, tmp, duplicate); err != nil {
+			return err
 		}
-		if attr.DefaultValue != nil && attr.Optional {
-			return errors.New("only one of default_value or optional should be set")
-		}
-		if _, ok := duplicate[attr.Key]; ok {
-			return fmt.Errorf("duplicate key found in attributes config: %s", attr.Key)
-		}
-		if err := tmp.FromRaw(attr.DefaultValue); err != nil {
-			return fmt.Errorf("invalid default value specified for attribute %s", attr.Key)
-		}
-		duplicate[attr.Key] = struct{}{}
 	}
+	return nil
+}
+
+func validateAttribute(attr Attribute, tmp pcommon.Value, duplicate map[string]struct{}) error {
+	if attr.Key == "" {
+		return errors.New("key must be set for an attribute")
+	}
+	if attr.DefaultValue != nil && attr.Optional {
+		return errors.New("only one of default_value or optional should be set")
+	}
+	if _, ok := duplicate[attr.Key]; ok {
+		return fmt.Errorf("duplicate key found in attributes config: %s", attr.Key)
+	}
+	if err := tmp.FromRaw(attr.DefaultValue); err != nil {
+		return fmt.Errorf("invalid default value specified for attribute %s", attr.Key)
+	}
+	duplicate[attr.Key] = struct{}{}
 	return nil
 }
 
@@ -304,11 +352,16 @@ func (mi *MetricInfo) validateGauge() error {
 	return nil
 }
 
-// validateMetricInfo is an utility method validate all supported metric
-// types defined for the metric info including any ottl expressions.
-func validateMetricInfo[K any](mi *MetricInfo, parser ottl.Parser[K]) error {
+// validateMetricInfo validates all supported metric types defined for the
+// metric info including any OTTL expressions. syntheticCtx is evaluated
+// against the dynamic_resource_attributes expression (if set) to catch
+// return-type errors at config time.
+func validateMetricInfo[K any](mi *MetricInfo, parser ottl.Parser[K], syntheticCtx K) error {
 	if mi.Name == "" {
 		return errors.New("missing required metric name configuration")
+	}
+	if err := mi.validateIncludeResourceAttributes(); err != nil {
+		return fmt.Errorf("include_resource_attributes validation failed: %w", err)
 	}
 	if err := mi.validateAttributes(); err != nil {
 		return fmt.Errorf("attributes validation failed: %w", err)
@@ -379,5 +432,89 @@ func validateMetricInfo[K any](mi *MetricInfo, parser ottl.Parser[K]) error {
 	if _, err := parser.ParseConditions(mi.Conditions); err != nil {
 		return fmt.Errorf("failed to parse OTTL conditions: %w", err)
 	}
+
+	if mi.DynamicResourceAttributes != nil && mi.DynamicResourceAttributes.Statement != "" {
+		expr, err := parser.ParseValueExpression(mi.DynamicResourceAttributes.Statement)
+		if err != nil {
+			return fmt.Errorf("failed to parse dynamic_resource_attributes OTTL expression: %w", err)
+		}
+		if err := validateDynResAttrReturnType(expr, syntheticCtx); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// validateDynResAttrReturnType evaluates a parsed dynamic_resource_attributes
+// expression against a synthetic transform context to verify the return type
+// at config time. If the expression cannot be evaluated with synthetic data
+// (e.g. it calls a custom function that requires real signal data), the check
+// is skipped and the runtime type assertion will catch it.
+func validateDynResAttrReturnType[K any](expr *ottl.ValueExpression[K], syntheticCtx K) error {
+	result, err := expr.Eval(context.Background(), syntheticCtx)
+	if err != nil {
+		return nil
+	}
+	if _, ok := result.(pcommon.Map); !ok {
+		return fmt.Errorf(
+			"dynamic_resource_attributes statement must return a pcommon.Map, "+
+				"but evaluated to %T; ensure the expression "+
+				"returns a Map (e.g. resource.attributes)",
+			result,
+		)
+	}
+	return nil
+}
+
+func syntheticSpanCtx() *ottlspan.TransformContext {
+	td := ptrace.NewTraces()
+	rs := td.ResourceSpans().AppendEmpty()
+	ss := rs.ScopeSpans().AppendEmpty()
+	s := ss.Spans().AppendEmpty()
+	return ottlspan.NewTransformContextPtr(rs, ss, s)
+}
+
+func syntheticDatapointCtx() *ottldatapoint.TransformContext {
+	md := pmetric.NewMetrics()
+	rm := md.ResourceMetrics().AppendEmpty()
+	sm := rm.ScopeMetrics().AppendEmpty()
+	m := sm.Metrics().AppendEmpty()
+	m.SetEmptyGauge().DataPoints().AppendEmpty()
+	return ottldatapoint.NewTransformContextPtr(rm, sm, m, m.Gauge().DataPoints().At(0))
+}
+
+func syntheticLogCtx() *ottllog.TransformContext {
+	ld := plog.NewLogs()
+	rl := ld.ResourceLogs().AppendEmpty()
+	sl := rl.ScopeLogs().AppendEmpty()
+	lr := sl.LogRecords().AppendEmpty()
+	return ottllog.NewTransformContextPtr(rl, sl, lr)
+}
+
+func syntheticProfileCtx() *ottlprofile.TransformContext {
+	pd := pprofile.NewProfiles()
+	rp := pd.ResourceProfiles().AppendEmpty()
+	sp := rp.ScopeProfiles().AppendEmpty()
+	p := sp.Profiles().AppendEmpty()
+	return ottlprofile.NewTransformContextPtr(rp, sp, p, pd.Dictionary())
+}
+
+// SpanParserFuncs returns the OTTL function map for span parsing.
+func (c *Config) SpanParserFuncs() map[string]ottl.Factory[*ottlspan.TransformContext] {
+	return customottl.SpanFuncs()
+}
+
+// DatapointParserFuncs returns the OTTL function map for datapoint parsing.
+func (c *Config) DatapointParserFuncs() map[string]ottl.Factory[*ottldatapoint.TransformContext] {
+	return customottl.DatapointFuncs()
+}
+
+// LogParserFuncs returns the OTTL function map for log parsing.
+func (c *Config) LogParserFuncs() map[string]ottl.Factory[*ottllog.TransformContext] {
+	return customottl.LogFuncs()
+}
+
+// ProfileParserFuncs returns the OTTL function map for profile parsing.
+func (c *Config) ProfileParserFuncs() map[string]ottl.Factory[*ottlprofile.TransformContext] {
+	return customottl.ProfileFuncs()
 }

@@ -302,9 +302,6 @@ include_resource_attributes:
     optional: true
 ```
 
-With the above configuration the produced metrics would have the following
-resource attributes:
-
 - `resource.foo` will be present for the produced metrics if the incoming data also
   has the attribute defined. If the attribute is missing in the incoming data the
   output metric will be produced without the said attribute.
@@ -315,6 +312,9 @@ resource attributes:
   are basically an include list, the `optional` option is a no-op i.e. the resource
   attributes with `optional` set to `true` behaves identical to an attribute configured
   without `default_value` or `optional`.
+
+For dynamic attribute inclusion (e.g. when the set of attribute keys is not known at
+configuration time), see [Dynamic resource attributes](#dynamic-resource-attributes).
 
 ### Single writer
 
@@ -329,8 +329,110 @@ resource attribute is added to each produced metric:
 signal_to_metrics.service.instance.id: <service_instance_id_of_the_otel_collector>
 ```
 
+### Dynamic resource attributes
+
+The `dynamic_resource_attributes` object optionally configures an OTTL value
+expression that is evaluated once per signal item (span, log record, datapoint,
+or profile). The expression must return a `pcommon.Map`. The resulting key-value
+pairs are merged into that metric's resource attributes alongside the statically
+configured `include_resource_attributes`.
+
+```yaml
+dynamic_resource_attributes:
+  statement: <ottl_value_expression>  # required -- must return a pcommon.Map
+```
+
+- [**Required**] `statement` is an OTTL value expression that **must evaluate to a
+  `pcommon.Map`**. At config time the connector evaluates the expression against a
+  synthetic (empty) signal to verify the return type — expressions that return a
+  non-Map value (e.g. a bare string literal) will be rejected at startup. If the
+  expression cannot be evaluated with empty data (e.g. it calls a custom function
+  that requires real attributes), the check is deferred to runtime.
+  The expression has access to the
+  [otelcol context](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/pkg/ottl/contexts/ottlotelcol)
+  (`otelcol.client.metadata`, `otelcol.client.auth.attributes`, etc.) in addition
+  to the standard signal-specific paths (`resource.attributes`, `attributes`, etc.).
+When `dynamic_resource_attributes` is not set (default), no dynamic evaluation
+occurs and the connector behaves exactly as before.
+
+The merge order is: dynamic expression result first, then static
+`include_resource_attributes` (which can overwrite dynamic keys), then collector
+instance info (always wins last).
+
+**Example 1 -- prefix-based label forwarding:**
+
+Use the built-in `FilterMapByKeyList` function with a `"*"` wildcard selects all prefix-matched keys dynamically:
+
+```yaml
+signal_to_metrics:
+  spans:
+    - name: tenant.span.count
+      include_resource_attributes:
+        - key: service.name
+      dynamic_resource_attributes:
+        statement: |
+          FilterMapByKeyList(resource.attributes, "*", ["labels.", "numeric_labels."])
+      sum:
+        value: "1"
+```
+
+Given resource attributes `service.name=svc`, `labels.team=platform`, and
+`numeric_labels.cost=42`, the output metric resource will contain
+`service.name` (static), `labels.team`, and `numeric_labels.cost` (dynamic).
+
+**Example 2 -- metadata-driven attribute selection:**
+
+Use the built-in `FilterMapByKeyList` function with an allow-list read from `client.Metadata` to
+select matching resource attributes at runtime:
+
+```yaml
+signal_to_metrics:
+  spans:
+    - name: my.metric
+      include_resource_attributes:
+        - key: service.name
+      dynamic_resource_attributes:
+        statement: |
+          FilterMapByKeyList(resource.attributes, otelcol.client.metadata["x-allowed-attrs"], ["labels.", "numeric_labels."])
+      sum:
+        value: "1"
+```
+
+The expression reads the allow-list from the `x-allowed-attrs` metadata key
+(a comma-separated string of base key names, e.g. `"team,cost"`) and returns
+only prefix-matched resource attributes whose base name is in the list.
+
+**Example 3 -- resource-attribute-driven allow-list:**
+
+Read the allow-list from a resource attribute instead of client metadata:
+
+```yaml
+signal_to_metrics:
+  spans:
+    - name: my.metric
+      include_resource_attributes:
+        - key: service.name
+      dynamic_resource_attributes:
+        statement: |
+          FilterMapByKeyList(resource.attributes, resource.attributes["allowed.labels"], ["labels.", "numeric_labels."])
+      sum:
+        value: "1"
+```
+
+If the incoming resource has `allowed.labels="team,cost"`, `labels.team=platform`,
+`labels.env=prod`, and `numeric_labels.cost=42`, the output metric resource will
+contain `service.name` (static), `labels.team`, and `numeric_labels.cost` (dynamic).
+The `labels.env` key is excluded because `env` is not in the allow-list.
+If the `allowed.labels` resource attribute is missing, the `key_list` resolves
+to `nil` and no dynamic attributes are added.
+
 ### Custom OTTL functions
 
-The component implements the following custom OTTL functions:
+The component ships the following built-in custom OTTL functions:
 
-1. `AdjustedCount`: a converter capable of calculating [adjusted count for a span](https://github.com/open-telemetry/oteps/blob/main/text/trace/0235-sampling-threshold-in-trace-state.md).
+- `AdjustedCount`: a converter capable of calculating [adjusted count for a span](https://github.com/open-telemetry/oteps/blob/main/text/trace/0235-sampling-threshold-in-trace-state.md).
+- `FilterMapByKeyList(source, key_list, prefixes...)`: filters a map by an allow-list of keys scoped to one or more prefixes. `key_list` is a
+  comma-separated string of base key names (after stripping the prefix), the special value `"*"` to accept all prefix-matched keys, or `nil`/`""` to
+  reject all. Returns a `pcommon.Map`. See [Dynamic resource attributes](#dynamic-resource-attributes) for examples.
+
+These functions are available in all OTTL expressions (conditions, value expressions, and `dynamic_resource_attributes`) for all signal types.

@@ -125,6 +125,40 @@ func TestConfig(t *testing.T) {
 			},
 		},
 		{
+			path: "empty_key_and_prefix",
+			errorMsgs: []string{
+				fullErrorForSignal(t, "spans", "include_resource_attributes validation failed: key must be set for an attribute"),
+				fullErrorForSignal(t, "datapoints", "include_resource_attributes validation failed: key must be set for an attribute"),
+				fullErrorForSignal(t, "logs", "include_resource_attributes validation failed: key must be set for an attribute"),
+				fullErrorForSignal(t, "profiles", "include_resource_attributes validation failed: key must be set for an attribute"),
+			},
+		},
+		{
+			path: "invalid_dynamic_resource_attrs_type",
+			errorMsgs: []string{
+				fullErrorForSignal(t, "spans", "dynamic_resource_attributes statement must return a pcommon.Map"),
+				fullErrorForSignal(t, "datapoints", "dynamic_resource_attributes statement must return a pcommon.Map"),
+				fullErrorForSignal(t, "logs", "dynamic_resource_attributes statement must return a pcommon.Map"),
+				fullErrorForSignal(t, "profiles", "dynamic_resource_attributes statement must return a pcommon.Map"),
+			},
+		},
+		{
+			path: "valid_dynamic_resource_attrs",
+			expected: &Config{
+				Spans: []MetricInfo{
+					{
+						Name: "span.sum",
+						DynamicResourceAttributes: &DynamicResourceAttributes{
+							Statement: `FilterMapByKeyList(resource.attributes, "*", ["labels.", "numeric_labels."])`,
+						},
+						Sum: configoptional.Some(Sum{
+							Value: "1",
+						}),
+					},
+				},
+			},
+		},
+		{
 			path: "valid_full",
 			expected: &Config{
 				Spans: []MetricInfo{

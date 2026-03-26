@@ -4,6 +4,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -11,7 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/ptrace"
+	"go.uber.org/zap"
 
+	"github.com/open-telemetry/opentelemetry-collector-contrib/connector/signaltometricsconnector/internal/customottl"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/ottl/contexts/ottlspan"
 )
 
@@ -84,10 +89,14 @@ func TestFilterResourceAttributes(t *testing.T) {
 			}
 			inputResourceAttrsM := pcommon.NewMap()
 			require.NoError(t, inputResourceAttrsM.FromRaw(inputAttributes))
-			actual := md.FilterResourceAttributes(
+			actual, err := md.FilterResourceAttributes(
+				context.Background(),
+				(*ottlspan.TransformContext)(nil),
 				inputResourceAttrsM,
 				testCollectorInstanceInfo(t),
+				zap.NewNop(),
 			)
+			require.NoError(t, err)
 			assert.Empty(t, cmp.Diff(tc.expected, actual.AsRaw()))
 		})
 	}
@@ -161,6 +170,134 @@ func TestFilterAttributes(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFilterResourceAttributes_DynamicExpression(t *testing.T) {
+	parser := testSpanParser(t)
+
+	resourceAttrs := map[string]any{
+		"service.name":        "svc",
+		"labels.team":         "platform",
+		"labels.env":          "prod",
+		"numeric_labels.cost": float64(42),
+		"allowed.labels":      "team,cost",
+	}
+
+	cases := []struct {
+		name                      string
+		expr                      string
+		includeResourceAttributes []AttributeKeyValue
+		expected                  map[string]any
+		wantErr                   string
+	}{
+		{
+			name:    "dynamic_expression_non_map_returns_error",
+			expr:    `"not_a_map"`,
+			wantErr: "must return a pcommon.Map",
+		},
+		{
+			name: "metadata_driven_attribute_selection",
+			expr: `FilterMapByKeyList(resource.attributes, "team", ["labels.", "numeric_labels."])`,
+			includeResourceAttributes: []AttributeKeyValue{
+				testAttributeKeyValue(t, "service.name", false, nil),
+			},
+			expected: map[string]any{
+				"service.name":                          "svc",
+				"labels.team":                           "platform",
+				"signal_to_metrics.service.instance.id": testServiceInstanceID,
+			},
+		},
+		{
+			name: "resource_attribute_driven_allow_list",
+			expr: `FilterMapByKeyList(resource.attributes, resource.attributes["allowed.labels"], ["labels.", "numeric_labels."])`,
+			includeResourceAttributes: []AttributeKeyValue{
+				testAttributeKeyValue(t, "service.name", false, nil),
+			},
+			expected: map[string]any{
+				"service.name":                          "svc",
+				"labels.team":                           "platform",
+				"numeric_labels.cost":                   float64(42),
+				"signal_to_metrics.service.instance.id": testServiceInstanceID,
+			},
+		},
+		{
+			name: "resource_attribute_driven_allow_list_missing_key",
+			expr: `FilterMapByKeyList(resource.attributes, resource.attributes["labels-does-not-exist"], ["labels.", "numeric_labels."])`,
+			includeResourceAttributes: []AttributeKeyValue{
+				testAttributeKeyValue(t, "service.name", false, nil),
+			},
+			expected: map[string]any{
+				"service.name":                          "svc",
+				"signal_to_metrics.service.instance.id": testServiceInstanceID,
+			},
+		},
+		{
+			name: "prefix_based_label_forwarding",
+			expr: `FilterMapByKeyList(resource.attributes, "*", ["labels.", "numeric_labels."])`,
+			includeResourceAttributes: []AttributeKeyValue{
+				testAttributeKeyValue(t, "service.name", false, nil),
+			},
+			expected: map[string]any{
+				"service.name":                          "svc",
+				"labels.team":                           "platform",
+				"labels.env":                            "prod",
+				"numeric_labels.cost":                   float64(42),
+				"signal_to_metrics.service.instance.id": testServiceInstanceID,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dynExpr, err := parser.ParseValueExpression(tc.expr)
+			require.NoError(t, err)
+
+			md := MetricDef[*ottlspan.TransformContext]{
+				Key:                       MetricKey{Name: "test.metric"},
+				IncludeResourceAttributes: tc.includeResourceAttributes,
+				DynResAttrs: &DynResAttrConfig[*ottlspan.TransformContext]{
+					Expression: dynExpr,
+				},
+			}
+
+			inputAttrs := pcommon.NewMap()
+			require.NoError(t, inputAttrs.FromRaw(resourceAttrs))
+
+			td := ptrace.NewTraces()
+			rs := td.ResourceSpans().AppendEmpty()
+			inputAttrs.CopyTo(rs.Resource().Attributes())
+			ss := rs.ScopeSpans().AppendEmpty()
+			span := ss.Spans().AppendEmpty()
+			tCtx := ottlspan.NewTransformContextPtr(rs, ss, span)
+			defer tCtx.Close()
+
+			actual, err := md.FilterResourceAttributes(
+				context.Background(),
+				tCtx,
+				inputAttrs,
+				testCollectorInstanceInfo(t),
+				zap.NewNop(),
+			)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+
+			if tc.expected != nil {
+				assert.Empty(t, cmp.Diff(tc.expected, actual.AsRaw()))
+			}
+		})
+	}
+}
+
+func testSpanParser(t *testing.T) ottl.Parser[*ottlspan.TransformContext] {
+	t.Helper()
+	set := componenttest.NewNopTelemetrySettings()
+	funcs := customottl.SpanFuncs()
+	parser, err := ottlspan.NewParser(funcs, set)
+	require.NoError(t, err)
+	return parser
 }
 
 func testCollectorInstanceInfo(t *testing.T) CollectorInstanceInfo {
