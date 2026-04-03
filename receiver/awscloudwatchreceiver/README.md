@@ -7,7 +7,7 @@ the [AWS SDK for Cloudwatch Logs](https://docs.aws.amazon.com/sdk-for-go/api/ser
 
 | Status        |           |
 | ------------- |-----------|
-| Stability     | [alpha]: logs   |
+| Stability     | [alpha]: logs, metrics   |
 | Distributions | [contrib] |
 | Issues        | [![Open issues](https://img.shields.io/github/issues-search/open-telemetry/opentelemetry-collector-contrib?query=is%3Aissue%20is%3Aopen%20label%3Areceiver%2Fawscloudwatch%20&label=open&color=orange&logo=opentelemetry)](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues?q=is%3Aopen+is%3Aissue+label%3Areceiver%2Fawscloudwatch) [![Closed issues](https://img.shields.io/github/issues-search/open-telemetry/opentelemetry-collector-contrib?query=is%3Aissue%20is%3Aclosed%20label%3Areceiver%2Fawscloudwatch%20&label=closed&color=blue&logo=opentelemetry)](https://github.com/open-telemetry/opentelemetry-collector-contrib/issues?q=is%3Aclosed+is%3Aissue+label%3Areceiver%2Fawscloudwatch) |
 | Code coverage | [![codecov](https://codecov.io/github/open-telemetry/opentelemetry-collector-contrib/graph/main/badge.svg?component=receiver_awscloudwatch)](https://app.codecov.io/gh/open-telemetry/opentelemetry-collector-contrib/tree/main/?components%5B0%5D=receiver_awscloudwatch&displayType=list) |
@@ -31,8 +31,9 @@ This receiver uses the [AWS SDK](https://docs.aws.amazon.com/sdk-for-go/v1/devel
 | `region`        | *required* | string | The AWS recognized region string                                                                                                                                                                                                                                                  |
 | `profile`       | *optional* | string | The AWS profile used to authenticate, if none is specified the default is chosen from the list of profiles                                                                                                                                                                        |
 | `imds_endpoint` | *optional* | string | A way of specifying a custom URL to be used by the EC2 IMDS client to validate the session. If unset, and the environment variable `AWS_EC2_METADATA_SERVICE_ENDPOINT` has a value the client will use the value of the environment variable as the endpoint for operation calls. |
-| `logs`          | *optional* | `Logs` | Configuration for Logs ingestion of this receiver                                                                                                                                                                                                                                 |
-| `storage`       | *optional* | string | The ID of a storage extension to be used for state persistence.                                                                                                                                                                                                                   |
+| `logs`          | *optional* | `Logs`    | Configuration for logs collection. See [Logs Parameters](#logs-parameters).       |
+| `metrics`       | *optional* | `Metrics` | Configuration for metrics collection. See [Metrics Parameters](#metrics-parameters-getmetricdata--listmetrics). |
+| `storage`       | *optional* | string    | The ID of a storage extension to be used for state persistence.                   |
 
 ### Logs Parameters
 
@@ -64,7 +65,68 @@ This receiver uses the [AWS SDK](https://docs.aws.amazon.com/sdk-for-go/v1/devel
       - `names`: A list of full log stream names to filter the discovered log groups to collect from.
       - `prefixes`: A list of prefixes to filter the discovered log groups to collect from.
 
-#### Autodiscovery Example Configuration
+### Metrics Parameters (GetMetricData / ListMetrics)
+
+The metrics path uses the collector's scraper pattern. Configure under `metrics`:
+
+| Parameter             | Type     | Default    | Description                                                                                                                                                                                  |
+| --------------------- | -------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collection_interval` | Duration | 5 minutes  | How often to scrape CloudWatch metrics.                                                                                                                                                      |
+| `period`              | Duration | 300s       | CloudWatch metric period for each GetMetricData query.                                                                                                                                       |
+| `delay`               | Duration | 10 minutes | How far back from now to set the query end time, to account for CloudWatch metric publication latency. Each scrape queries the window `[now - delay - collection_interval, now - delay]`, so consecutive scrapes do not overlap. |
+| `metrics`             | List     | —          | Explicit list of metric queries (namespace, metric_name, dimensions, stat).                                                                                                                  |
+| `discovery`           | Optional | —          | Use ListMetrics to discover metrics (mutually exclusive with `metrics`).                                                                                                                     |
+
+When using `discovery`, set `namespace`, optional `metric_name`, `limit`, and `stat`. When using an explicit `metrics` list, each entry must have `namespace` and `metric_name`; for EC2 metrics include the `InstanceId` dimension.
+
+#### Naming conventions
+
+Metric names and dimension keys are converted from PascalCase to snake_case (e.g. `CPUUtilization` → `cpu_utilization`, `LoadBalancer` → `load_balancer`). Well-known dimensions are additionally mapped to OpenTelemetry semantic conventions:
+
+| CloudWatch dimension | OTel attribute        |
+| -------------------- | --------------------- |
+| `InstanceId`         | `service.instance.id` |
+
+All other dimensions follow the snake_case conversion and are emitted as plain resource attributes.
+
+> **Note on `delay`:** CloudWatch metrics are typically available within 3–10 minutes of being recorded. If `delay` is set too low, the query window may fall in a period where data has not yet been published. Increase `delay` if you observe missing data points.
+
+#### Explicit Metrics Example
+
+```yaml
+awscloudwatch:
+  region: us-east-1
+  metrics:
+    collection_interval: 1m
+    period: 60s
+    delay: 5m
+    metrics:
+      - namespace: AWS/EC2
+        metric_name: CPUUtilization
+        stat: Average
+        dimensions:
+          InstanceId: i-1234567890abcdef0
+      - namespace: AWS/EC2
+        metric_name: NetworkIn
+        stat: Sum
+```
+
+#### Metrics Autodiscovery Example
+
+```yaml
+awscloudwatch:
+  region: us-east-1
+  metrics:
+    collection_interval: 5m
+    period: 300s
+    delay: 10m
+    discovery:
+      namespace: AWS/EC2
+      limit: 200
+      stat: Average
+```
+
+#### Logs Autodiscovery Example Configuration
 
 ```yaml
 awscloudwatch:
@@ -79,7 +141,7 @@ awscloudwatch:
           prefixes: [kube-api-controller]
 ```
 
-#### Autodiscovery with Account ID Filtering Example
+#### Logs Autodiscovery with Account ID Filtering Example
 
 ```yaml
 awscloudwatch:
@@ -94,7 +156,7 @@ awscloudwatch:
         prefix: /aws/lambda/
 ```
 
-#### Named Example
+#### Logs Named Groups Example
 
 ```yaml
 awscloudwatch:
