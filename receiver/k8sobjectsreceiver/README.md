@@ -24,7 +24,7 @@ See [example](#example) for more information.
 The following is example configuration
 
 ```yaml
-  k8sobjects:
+  k8s_objects:
     auth_type: serviceAccount
     k8s_leader_elector: k8s_leader_elector
     objects:
@@ -111,7 +111,7 @@ metadata:
 data:
   config.yaml: |
     receivers:
-      k8sobjects:
+      k8s_objects:
         objects:
           - name: pods
             mode: pull
@@ -126,7 +126,7 @@ data:
     service:
       pipelines:
         logs:
-          receivers: [k8sobjects]
+          receivers: [k8s_objects]
           exporters: [otlp_grpc]
 EOF
 ```
@@ -256,5 +256,5 @@ workflow. These tested versions represent the officially supported Kubernetes ve
 
 If receiver returns error similar to below, make sure that resource is added to `ClusterRole`.
 ```
-{"kind": "receiver", "name": "k8sobjects", "pipeline": "logs", "resource": "events.k8s.io/v1, Resource=events", "error": "unknown"}
+{"kind": "receiver", "name": "k8s_objects", "pipeline": "logs", "resource": "events.k8s.io/v1, Resource=events", "error": "unknown"}
 ```
