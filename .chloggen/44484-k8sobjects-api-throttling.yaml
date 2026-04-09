@@ -1,5 +1,5 @@
 change_type: enhancement
-component: receiver/k8sobjects
+component: receiver/k8s_objects
 note: Add `kube_api_qps` and `kube_api_burst` config options to control Kubernetes API request rate limits and prevent client-side throttling when watching or polling many resources
 issues: [44484]
 subtext: |
