@@ -219,7 +219,7 @@ components:
         - splunkenterprise
         - sqlquery
         - sqlserver
-        - sshcheck
+        - ssh_check
         - statsd
         - stef
         - syslog
