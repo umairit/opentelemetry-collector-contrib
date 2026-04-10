@@ -230,7 +230,7 @@ components:
         - udp_log
         - vcenter
         - wavefront
-        - webhookevent
+        - webhook_event
         - windowseventlog
         - windowsperfcounters
         - windowsservice
