@@ -181,7 +181,7 @@ linters:
         path: receiver/jaegerreceiver/
       - linters:
           - forbidigo
-        path: receiver/vcenterreceiver/
+        path: receiver/prometheusreceiver/
 
       # https://github.com/open-telemetry/opentelemetry-collector-contrib/issues/47586
       - linters:
