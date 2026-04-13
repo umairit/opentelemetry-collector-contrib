@@ -12,6 +12,7 @@ If a timestamp block is specified, the parser operator will perform the timestam
 | `layout_type` | `strptime` | The type of timestamp. Valid values are `strptime`, `gotime`, and `epoch`. |
 | `layout`      | required   | The exact layout of the timestamp to be parsed. |
 | `location`    | `Local`    | The geographic location (timezone) to use when parsing a timestamp that does not include a timezone. The available locations depend on the local IANA Time Zone database. [This page](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) contains many examples, such as `America/New_York`. |
+| `assume_current_date` | `false` | When `true`, and the timestamp layout does not contain date components, uses today's date in the parsed timestamp. |
 
 ## Layout Types
 

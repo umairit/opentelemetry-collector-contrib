@@ -38,12 +38,14 @@ func NewTimeParser() TimeParser {
 
 // TimeParser is a helper that parses time onto an entry.
 type TimeParser struct {
-	ParseFrom  *entry.Field `mapstructure:"parse_from"`
-	Layout     string       `mapstructure:"layout"`
-	LayoutType string       `mapstructure:"layout_type"`
-	Location   string       `mapstructure:"location"`
+	ParseFrom         *entry.Field `mapstructure:"parse_from"`
+	Layout            string       `mapstructure:"layout"`
+	LayoutType        string       `mapstructure:"layout_type"`
+	Location          string       `mapstructure:"location"`
+	AssumeCurrentDate bool         `mapstructure:"assume_current_date"`
 
-	location *time.Location
+	location           *time.Location
+	layoutContainsDate bool
 }
 
 // Unmarshal starting from default settings
@@ -106,6 +108,7 @@ func (t *TimeParser) Validate() error {
 	}
 
 	if t.LayoutType == GotimeKey { // also covers StrptimeKey because it was remapped above
+		t.layoutContainsDate = gotimeLayoutContainsDate(t.Layout)
 		if err := t.setLocation(); err != nil {
 			return fmt.Errorf("invalid 'location': %w", err)
 		}
@@ -159,7 +162,7 @@ func (t *TimeParser) Parse(entry *entry.Entry) error {
 			return err
 		}
 		// timeutils.ParseGotime calls timeutils.SetTimestampYear before returning the timeValue
-		entry.Timestamp = timeValue
+		entry.Timestamp = t.withCurrentDate(timeValue)
 	case EpochKey:
 		timeValue, err := t.parseEpochTime(value)
 		if err != nil {
@@ -171,6 +174,40 @@ func (t *TimeParser) Parse(entry *entry.Entry) error {
 	}
 
 	return nil
+}
+
+func (t *TimeParser) withCurrentDate(parsedTime time.Time) time.Time {
+	if !t.AssumeCurrentDate || t.layoutContainsDate {
+		return parsedTime
+	}
+
+	now := timeutils.Now().In(parsedTime.Location())
+	return time.Date(now.Year(), now.Month(), now.Day(), parsedTime.Hour(), parsedTime.Minute(), parsedTime.Second(), parsedTime.Nanosecond(), parsedTime.Location())
+}
+
+func gotimeLayoutContainsDate(layout string) bool {
+	dateTokens := []string{
+		"2006",
+		"06",
+		"January",
+		"Jan",
+		"01",
+		"002",
+		"__2",
+		"_2",
+		"02",
+		"1/2",
+		"1-2",
+		"1.2",
+	}
+
+	for _, token := range dateTokens {
+		if strings.Contains(layout, token) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (t *TimeParser) parseEpochTime(value any) (time.Time, error) {
