@@ -6,6 +6,7 @@ package k8sobserver // import "github.com/open-telemetry/opentelemetry-collector
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +15,13 @@ import (
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer"
@@ -34,10 +41,86 @@ type k8sObserver struct {
 	serviceListerWatchers []cache.ListerWatcher
 	ingressListerWatchers []cache.ListerWatcher
 	nodeListerWatcher     cache.ListerWatcher
+	crdListerWatchers     []crdListerWatcher
 	handler               *handler
 	once                  *sync.Once
 	stop                  chan struct{}
 	config                *Config
+}
+
+// crdListerWatcher holds a lister/watcher for a specific CRD along with its GVK.
+type crdListerWatcher struct {
+	listerWatcher cache.ListerWatcher
+	gvk           schema.GroupVersionKind
+}
+
+// dynamicListerWatcher implements cache.ListerWatcher for dynamic resources.
+type dynamicListerWatcher struct {
+	client    dynamic.Interface
+	gvr       schema.GroupVersionResource
+	namespace string
+}
+
+// newDynamicListerWatcher creates a new lister/watcher for a dynamic resource.
+func newDynamicListerWatcher(client dynamic.Interface, gvr schema.GroupVersionResource, namespace string) cache.ListerWatcher {
+	return &dynamicListerWatcher{
+		client:    client,
+		gvr:       gvr,
+		namespace: namespace,
+	}
+}
+
+func (d *dynamicListerWatcher) List(options metav1.ListOptions) (runtime.Object, error) {
+	return d.client.Resource(d.gvr).Namespace(d.namespace).List(context.Background(), options)
+}
+
+func (d *dynamicListerWatcher) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return d.client.Resource(d.gvr).Namespace(d.namespace).Watch(context.Background(), options)
+}
+
+// buildCRDListerWatchers returns one list/watch pair per (CRD, namespace) when namespaces is set,
+// or a single cluster-wide watcher per CRD when namespaces is empty.
+func buildCRDListerWatchers(dynamicClient dynamic.Interface, cfg *Config, log *zap.Logger) []crdListerWatcher {
+	var crdListerWatchers []crdListerWatcher
+	for _, crdConfig := range cfg.ObserveCRDs {
+		gvk := schema.GroupVersionKind{
+			Group:   crdConfig.Group,
+			Version: crdConfig.Version,
+			Kind:    crdConfig.Kind,
+		}
+		resource := strings.ToLower(crdConfig.Kind) + "s"
+		gvr := schema.GroupVersionResource{
+			Group:    crdConfig.Group,
+			Version:  crdConfig.Version,
+			Resource: resource,
+		}
+
+		if log != nil {
+			log.Debug("observing CRD",
+				zap.String("group", crdConfig.Group),
+				zap.String("version", crdConfig.Version),
+				zap.String("kind", crdConfig.Kind),
+				zap.String("resource", resource))
+		}
+
+		namespaces := cfg.Namespaces
+		if len(namespaces) == 0 {
+			lw := newDynamicListerWatcher(dynamicClient, gvr, v1.NamespaceAll)
+			crdListerWatchers = append(crdListerWatchers, crdListerWatcher{
+				listerWatcher: lw,
+				gvk:           gvk,
+			})
+		} else {
+			for _, namespace := range namespaces {
+				lw := newDynamicListerWatcher(dynamicClient, gvr, namespace)
+				crdListerWatchers = append(crdListerWatchers, crdListerWatcher{
+					listerWatcher: lw,
+					gvk:           gvk,
+				})
+			}
+		}
+	}
+	return crdListerWatchers
 }
 
 // Start will populate the cache.SharedInformers for pods and nodes as configured and run them as goroutines.
@@ -85,6 +168,22 @@ func (k *k8sObserver) Start(_ context.Context, _ component.Host) error {
 				go ingressInformer.Run(k.stop)
 				if _, err := ingressInformer.AddEventHandler(k.handler); err != nil {
 					k.telemetry.Logger.Error("error adding event handler to ingress informer", zap.Error(err))
+				}
+			}
+		}
+		if k.crdListerWatchers != nil {
+			for _, crdLW := range k.crdListerWatchers {
+				k.telemetry.Logger.Debug("creating and starting CRD informer",
+					zap.String("group", crdLW.gvk.Group),
+					zap.String("version", crdLW.gvk.Version),
+					zap.String("kind", crdLW.gvk.Kind))
+				// Create an unstructured object with the correct GVK for the informer
+				obj := &unstructured.Unstructured{}
+				obj.SetGroupVersionKind(crdLW.gvk)
+				crdInformer := cache.NewSharedInformer(crdLW.listerWatcher, obj, 0)
+				go crdInformer.Run(k.stop)
+				if _, err := crdInformer.AddEventHandler(k.handler); err != nil {
+					k.telemetry.Logger.Error("error adding event handler to CRD informer", zap.Error(err))
 				}
 			}
 		}
@@ -167,6 +266,16 @@ func newObserver(config *Config, set extension.Settings) (extension.Extension, e
 			}
 		}
 	}
+
+	var crdListerWatchers []crdListerWatcher
+	if len(config.ObserveCRDs) > 0 {
+		dynamicClient, err := k8sconfig.MakeDynamicClient(config.APIConfig)
+		if err != nil {
+			return nil, err
+		}
+		crdListerWatchers = buildCRDListerWatchers(dynamicClient, config, set.Logger)
+	}
+
 	h := &handler{idNamespace: set.ID.String(), endpoints: &sync.Map{}, logger: set.Logger}
 	obs := &k8sObserver{
 		EndpointsWatcher:      endpointswatcher.New(h, time.Second, set.Logger),
@@ -175,6 +284,7 @@ func newObserver(config *Config, set extension.Settings) (extension.Extension, e
 		serviceListerWatchers: serviceListerWatchers,
 		nodeListerWatcher:     nodeListerWatcher,
 		ingressListerWatchers: ingressListerWatchers,
+		crdListerWatchers:     crdListerWatchers,
 		stop:                  make(chan struct{}),
 		config:                config,
 		handler:               h,
