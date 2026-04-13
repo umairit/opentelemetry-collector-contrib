@@ -85,13 +85,17 @@ func (t *Transformer) flushLoop() {
 
 func (t *Transformer) Stop() error {
 	t.Lock()
-	defer t.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	t.flushAllSources(ctx, t.Write)
 
+	// Stop the ticker and close the shutdown channel while still holding the
+	// lock.  This prevents the flusher goroutine from re-entering
+	// flushAllSources between our unlock and the channel close.
+	t.ticker.Stop()
 	close(t.chClose)
+	t.Unlock()
 	return nil
 }
 
