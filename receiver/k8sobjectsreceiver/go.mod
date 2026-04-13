@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/google/uuid v1.6.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/extension/k8sleaderelector v0.149.0
+	github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage v0.149.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sconfig v0.149.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sinventory v0.149.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sleaderelectortest v0.149.0
@@ -18,6 +19,7 @@ require (
 	go.opentelemetry.io/collector/confmap v1.55.1-0.20260409104450-d686cf9058ce
 	go.opentelemetry.io/collector/consumer v1.55.1-0.20260409104450-d686cf9058ce
 	go.opentelemetry.io/collector/consumer/consumertest v0.149.1-0.20260409104450-d686cf9058ce
+	go.opentelemetry.io/collector/extension/xextension v0.149.1-0.20260409104450-d686cf9058ce
 	go.opentelemetry.io/collector/filter v0.149.1-0.20260409104450-d686cf9058ce
 	go.opentelemetry.io/collector/pdata v1.55.1-0.20260409104450-d686cf9058ce
 	go.opentelemetry.io/collector/receiver v1.55.1-0.20260409104450-d686cf9058ce
@@ -172,3 +174,5 @@ replace github.com/open-telemetry/opentelemetry-collector-contrib/pkg/golden => 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/extension/k8sleaderelector => ../../extension/k8sleaderelector
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/internal/k8sleaderelectortest => ../../internal/k8sleaderelectortest
+
+replace github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage => ../../extension/storage
