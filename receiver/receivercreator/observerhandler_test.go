@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/collector/otelcol"
 	"go.opentelemetry.io/collector/otelcol/otelcoltest"
 	"go.opentelemetry.io/collector/receiver/receivertest"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/observer"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/receiver/receivercreator/internal/metadata"
@@ -778,6 +779,7 @@ func newMockRunner(t *testing.T) *mockRunner {
 					require.NoError(t, event.Err())
 				},
 			}),
+			logger: zaptest.NewLogger(t),
 		},
 	}
 }
