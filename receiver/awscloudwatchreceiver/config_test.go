@@ -31,6 +31,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: nil,
 					},
@@ -51,9 +52,25 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: -1,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 				},
 			},
 			expectedErr: errInvalidEventLimit,
+		},
+		{
+			name: "Invalid Max Concurrent Groups",
+			config: Config{
+				Region: "us-west-2",
+				Logs: LogsConfig{
+					MaxEventsPerRequest: 1000,
+					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: 0,
+					Groups: GroupConfig{
+						AutodiscoverConfig: nil,
+					},
+				},
+			},
+			expectedErr: errInvalidMaxConcurrentGroups,
 		},
 		{
 			name: "Invalid Poll Interval",
@@ -62,6 +79,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        100 * time.Millisecond,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: nil,
 					},
@@ -76,6 +94,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: -10000,
@@ -92,6 +111,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit:   defaultLogGroupLimit,
@@ -111,6 +131,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: nil,
 					},
@@ -125,6 +146,7 @@ func TestValidate(t *testing.T) {
 				Logs: LogsConfig{
 					MaxEventsPerRequest: defaultEventLimit,
 					PollInterval:        defaultPollInterval,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: defaultEventLimit,
@@ -168,6 +190,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: defaultLogGroupLimit,
@@ -183,6 +206,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit:  100,
@@ -199,6 +223,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit:   100,
@@ -215,6 +240,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: 100,
@@ -233,6 +259,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						AutodiscoverConfig: &AutodiscoverConfig{
 							Limit: 100,
@@ -252,6 +279,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        5 * time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						NamedConfigs: map[string]StreamConfig{
 							"/aws/eks/dev-0/cluster": {},
@@ -268,6 +296,7 @@ func TestLoadConfig(t *testing.T) {
 				Logs: LogsConfig{
 					PollInterval:        5 * time.Minute,
 					MaxEventsPerRequest: defaultEventLimit,
+					MaxConcurrentGroups: defaultMaxConcurrentGroups,
 					Groups: GroupConfig{
 						NamedConfigs: map[string]StreamConfig{
 							"/aws/eks/dev-0/cluster": {

@@ -35,6 +35,8 @@ $defs:
     properties:
       groups:
         $ref: group_config
+      max_concurrent_groups:
+        type: integer
       max_events_per_request:
         type: integer
       poll_interval:

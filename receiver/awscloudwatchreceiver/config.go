@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	defaultPollInterval  = time.Minute
-	defaultEventLimit    = 1000
-	defaultLogGroupLimit = 50
+	defaultPollInterval        = time.Minute
+	defaultEventLimit          = 1000
+	defaultLogGroupLimit       = 50
+	defaultMaxConcurrentGroups = 1
 )
 
 // Config is the overall config structure for the awscloudwatchreceiver
@@ -33,6 +34,7 @@ type LogsConfig struct {
 	StartFrom           string        `mapstructure:"start_from"`
 	PollInterval        time.Duration `mapstructure:"poll_interval"`
 	MaxEventsPerRequest int           `mapstructure:"max_events_per_request"`
+	MaxConcurrentGroups int           `mapstructure:"max_concurrent_groups"`
 	Groups              GroupConfig   `mapstructure:"groups"`
 }
 
@@ -65,6 +67,7 @@ var (
 	errInvalidAutodiscoverLimit       = errors.New("the limit of autodiscovery of log groups is improperly configured, value must be greater than 0")
 	errAutodiscoverAndNamedConfigured = errors.New("both autodiscover and named configs are configured, Only one or the other is permitted")
 	errPrefixAndPatternConfigured     = errors.New("cannot specify both prefix and pattern")
+	errInvalidMaxConcurrentGroups     = errors.New("max concurrent groups is invalid, it must be a value greater than 1")
 )
 
 // Validate validates all portions of the relevant config
@@ -116,6 +119,10 @@ func (c *Config) validateLogsConfig() error {
 
 	if c.Logs.PollInterval < time.Second {
 		return errInvalidPollInterval
+	}
+
+	if c.Logs.MaxConcurrentGroups < 1 {
+		return errInvalidMaxConcurrentGroups
 	}
 
 	return c.Logs.Groups.validate()

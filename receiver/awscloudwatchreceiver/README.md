@@ -41,6 +41,7 @@ This receiver uses the [AWS SDK](https://docs.aws.amazon.com/sdk-for-go/v1/devel
 | `start_from`             | String   | Read all available logs from the beginning | Timestamp in `RFC3339` format (e.g., 2006-01-02T15:04:05Z07:00) indicating where to start reading logs |
 | `poll_interval`          | Duration | 1 minute                                   | Time to wait between log requests                                                                      |
 | `max_events_per_request` | Integer  | 1,000                                      | The maximum number of events to process per request to Cloudwatch                                      |
+| `max_concurrent_groups`  | Integer  | 1                                          | The maximum number of log groups to process at the same time                                                   |
 | `groups`                 | Optional | All Log Groups and Streams                 | Configuration for Log Groups, by default all Log Groups and Log Streams will be collected.             |
 
 ### Group Parameters

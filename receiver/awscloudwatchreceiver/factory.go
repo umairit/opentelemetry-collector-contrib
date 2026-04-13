@@ -43,6 +43,7 @@ func createDefaultConfig() component.Config {
 					Limit: defaultLogGroupLimit,
 				},
 			},
+			MaxConcurrentGroups: defaultMaxConcurrentGroups,
 		},
 	}
 }
