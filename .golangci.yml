@@ -190,10 +190,6 @@ linters:
         text: confighttp
       - linters:
           - forbidigo
-        path: receiver/mongodbatlasreceiver/
-        text: confighttp
-      - linters:
-          - forbidigo
         path: internal/aws/proxy/
         text: confighttp
       - linters:
