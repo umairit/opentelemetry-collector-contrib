@@ -1,7 +1,7 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-//go:build !linux && !windows && !darwin && !freebsd
+//go:build !linux && !windows && !darwin && !freebsd && !aix
 
 package processscraper // import "github.com/open-telemetry/opentelemetry-collector-contrib/receiver/hostmetricsreceiver/internal/scraper/processscraper"
 
@@ -18,6 +18,10 @@ func (s *processScraper) recordCPUTimeMetric(now pcommon.Timestamp, cpuTime *cpu
 }
 
 func (s *processScraper) recordCPUUtilization(now pcommon.Timestamp, cpuUtilization ucal.CPUUtilization) {
+}
+
+func (*processScraper) scrapeAndAppendContextSwitchMetrics(_ context.Context, _ pcommon.Timestamp, _ processHandle) error {
+	return nil
 }
 
 func getProcessName(context.Context, processHandle, string) (string, error) {
