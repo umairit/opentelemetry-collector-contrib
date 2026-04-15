@@ -6,10 +6,12 @@ package opampextension
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 	"syscall"
 	"testing"
@@ -18,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/open-telemetry/opamp-go/client/types"
 	"github.com/open-telemetry/opamp-go/protobufs"
+	"github.com/shirou/gopsutil/v4/host"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/collector/component"
@@ -29,8 +32,9 @@ import (
 	"go.opentelemetry.io/collector/pdata/pcommon"
 	"go.opentelemetry.io/collector/pipeline"
 	"go.opentelemetry.io/collector/service"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/status"
 	"github.com/open-telemetry/opentelemetry-collector-contrib/pkg/status/testhelpers"
@@ -70,7 +74,23 @@ func TestNewOpampAgentAttributes(t *testing.T) {
 func TestCreateAgentDescription(t *testing.T) {
 	hostname, err := os.Hostname()
 	require.NoError(t, err)
-	description := getOSDescription(zap.NewNop())
+	info, _ := host.Info()
+	var description, osVersion string
+	if info != nil {
+		osVersion = info.PlatformVersion
+		switch runtime.GOOS {
+		case "darwin":
+			description = "macOS " + info.PlatformVersion
+		case "linux":
+			description = cases.Title(language.English).String(info.Platform) + " " + info.PlatformVersion
+		case "windows":
+			description = info.Platform + " " + info.PlatformVersion
+		default:
+			description = runtime.GOOS
+		}
+	} else {
+		description = runtime.GOOS
+	}
 
 	serviceName := "otelcol-distrot"
 	serviceVersion := "distro.0"
@@ -78,27 +98,51 @@ func TestCreateAgentDescription(t *testing.T) {
 	extraResourceAttrKey := "hello"
 	extraResourceAttrValue := "world"
 
+	defaultIdentAttrs := []*protobufs.KeyValue{
+		stringKeyValue("service.instance.id", serviceInstanceUUID),
+		stringKeyValue("service.name", serviceName),
+		stringKeyValue("service.version", serviceVersion),
+	}
+
+	// buildNonIdentAttrs constructs the expected non-identifying attribute slice in
+	// alphabetical order, including os.version only when the platform provides it.
+	buildNonIdentAttrs := func(kvs map[string]string) []*protobufs.KeyValue {
+		base := map[string]string{
+			"host.arch":      runtime.GOARCH,
+			"host.name":      hostname,
+			"os.description": description,
+			"os.type":        runtime.GOOS,
+		}
+		if osVersion != "" {
+			base["os.version"] = osVersion
+		}
+		maps.Copy(base, kvs)
+		keys := make([]string, 0, len(base))
+		for k := range base {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		result := make([]*protobufs.KeyValue, 0, len(base))
+		for _, k := range keys {
+			result = append(result, stringKeyValue(k, base[k]))
+		}
+		return result
+	}
+
 	testCases := []struct {
 		name string
 		cfg  func(*Config)
 
-		expected *protobufs.AgentDescription
+		expected func() *protobufs.AgentDescription
 	}{
 		{
 			name: "No extra attributes",
 			cfg:  func(_ *Config) {},
-			expected: &protobufs.AgentDescription{
-				IdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("service.instance.id", serviceInstanceUUID),
-					stringKeyValue("service.name", serviceName),
-					stringKeyValue("service.version", serviceVersion),
-				},
-				NonIdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("host.arch", runtime.GOARCH),
-					stringKeyValue("host.name", hostname),
-					stringKeyValue("os.description", description),
-					stringKeyValue("os.type", runtime.GOOS),
-				},
+			expected: func() *protobufs.AgentDescription {
+				return &protobufs.AgentDescription{
+					IdentifyingAttributes:    defaultIdentAttrs,
+					NonIdentifyingAttributes: buildNonIdentAttrs(nil),
+				}
 			},
 		},
 		{
@@ -109,20 +153,14 @@ func TestCreateAgentDescription(t *testing.T) {
 					"k8s.pod.name": "my-very-cool-pod",
 				}
 			},
-			expected: &protobufs.AgentDescription{
-				IdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("service.instance.id", serviceInstanceUUID),
-					stringKeyValue("service.name", serviceName),
-					stringKeyValue("service.version", serviceVersion),
-				},
-				NonIdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("env", "prod"),
-					stringKeyValue("host.arch", runtime.GOARCH),
-					stringKeyValue("host.name", hostname),
-					stringKeyValue("k8s.pod.name", "my-very-cool-pod"),
-					stringKeyValue("os.description", description),
-					stringKeyValue("os.type", runtime.GOOS),
-				},
+			expected: func() *protobufs.AgentDescription {
+				return &protobufs.AgentDescription{
+					IdentifyingAttributes: defaultIdentAttrs,
+					NonIdentifyingAttributes: buildNonIdentAttrs(map[string]string{
+						"env":          "prod",
+						"k8s.pod.name": "my-very-cool-pod",
+					}),
+				}
 			},
 		},
 		{
@@ -132,18 +170,13 @@ func TestCreateAgentDescription(t *testing.T) {
 					"host.name": "override-host",
 				}
 			},
-			expected: &protobufs.AgentDescription{
-				IdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("service.instance.id", serviceInstanceUUID),
-					stringKeyValue("service.name", serviceName),
-					stringKeyValue("service.version", serviceVersion),
-				},
-				NonIdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("host.arch", runtime.GOARCH),
-					stringKeyValue("host.name", "override-host"),
-					stringKeyValue("os.description", description),
-					stringKeyValue("os.type", runtime.GOOS),
-				},
+			expected: func() *protobufs.AgentDescription {
+				return &protobufs.AgentDescription{
+					IdentifyingAttributes: defaultIdentAttrs,
+					NonIdentifyingAttributes: buildNonIdentAttrs(map[string]string{
+						"host.name": "override-host",
+					}),
+				}
 			},
 		},
 		{
@@ -151,19 +184,13 @@ func TestCreateAgentDescription(t *testing.T) {
 			cfg: func(c *Config) {
 				c.AgentDescription.IncludeResourceAttributes = true
 			},
-			expected: &protobufs.AgentDescription{
-				IdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue("service.instance.id", serviceInstanceUUID),
-					stringKeyValue("service.name", serviceName),
-					stringKeyValue("service.version", serviceVersion),
-				},
-				NonIdentifyingAttributes: []*protobufs.KeyValue{
-					stringKeyValue(extraResourceAttrKey, extraResourceAttrValue),
-					stringKeyValue("host.arch", runtime.GOARCH),
-					stringKeyValue("host.name", hostname),
-					stringKeyValue("os.description", description),
-					stringKeyValue("os.type", runtime.GOOS),
-				},
+			expected: func() *protobufs.AgentDescription {
+				return &protobufs.AgentDescription{
+					IdentifyingAttributes: defaultIdentAttrs,
+					NonIdentifyingAttributes: buildNonIdentAttrs(map[string]string{
+						extraResourceAttrKey: extraResourceAttrValue,
+					}),
+				}
 			},
 		},
 	}
@@ -185,7 +212,7 @@ func TestCreateAgentDescription(t *testing.T) {
 
 			err = o.createAgentDescription()
 			assert.NoError(t, err)
-			require.Equal(t, tc.expected, o.agentDescription)
+			require.Equal(t, tc.expected(), o.agentDescription)
 			assert.NoError(t, o.Shutdown(t.Context()))
 		})
 	}
