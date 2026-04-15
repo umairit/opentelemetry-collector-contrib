@@ -1,0 +1,7 @@
+change_type: enhancement
+
+component: exporter/prometheusremotewrite
+
+note: Add `exporter_timeout` configuration field to allow independent configuration of exporter and HTTP client timeouts, resolving timeout shadowing caused by squashed config structs.
+
+issues: [46209]
