@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -33,7 +34,9 @@ type s3Client interface {
 }
 
 type provider struct {
-	client s3Client
+	mu            sync.Mutex
+	clients       map[string]s3Client                             // keyed by "aws:<region>" for AWS, or endpoint URL for path-style
+	newClientFunc func(endpoint, region string) (s3Client, error) // overridden in tests
 }
 
 // NewFactory returns a new confmap.ProviderFactory that creates a confmap.Provider
@@ -56,7 +59,10 @@ func NewFactory() confmap.ProviderFactory {
 }
 
 func newWithSettings(confmap.ProviderSettings) confmap.Provider {
-	return &provider{client: nil}
+	return &provider{
+		clients:       make(map[string]s3Client),
+		newClientFunc: newS3Client,
+	}
 }
 
 func (fmp *provider) Retrieve(ctx context.Context, uri string, _ confmap.WatcherFunc) (*confmap.Retrieved, error) {
@@ -66,27 +72,15 @@ func (fmp *provider) Retrieve(ctx context.Context, uri string, _ confmap.Watcher
 		return nil, fmt.Errorf("%q uri is not valid s3-url: %w", uri, err)
 	}
 
-	if fmp.client == nil {
-		cfg, loadErr := config.LoadDefaultConfig(context.Background())
-		if loadErr != nil {
-			return nil, fmt.Errorf("failed to load configurations to initialize an AWS SDK client, error: %w", loadErr)
-		}
-		var clientOpts []func(*s3.Options)
-		if endpoint != "" {
-			clientOpts = append(clientOpts, func(o *s3.Options) {
-				o.BaseEndpoint = aws.String(endpoint)
-				o.UsePathStyle = true
-			})
-		}
-		fmp.client = s3.NewFromConfig(cfg, clientOpts...)
+	client, err := fmp.clientFor(endpoint, region)
+	if err != nil {
+		return nil, err
 	}
 
 	// s3 downloading
-	resp, err := fmp.client.GetObject(ctx, &s3.GetObjectInput{
+	resp, err := client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
-	}, func(o *s3.Options) {
-		o.Region = region
 	})
 	if err != nil {
 		return nil, fmt.Errorf("file in S3 failed to fetch uri %q: %w", uri, err)
@@ -101,6 +95,46 @@ func (fmp *provider) Retrieve(ctx context.Context, uri string, _ confmap.Watcher
 		return nil, err
 	}
 	return confmap.NewRetrieved(conf)
+}
+
+func (fmp *provider) clientFor(endpoint, region string) (s3Client, error) {
+	// For AWS virtual-hosted-style URIs (no custom endpoint), key by region so
+	// each region gets its own client. For path-style URIs, key by endpoint.
+	cacheKey := endpoint
+	if cacheKey == "" {
+		cacheKey = "aws:" + region
+	}
+
+	fmp.mu.Lock()
+	defer fmp.mu.Unlock()
+	if c, ok := fmp.clients[cacheKey]; ok {
+		return c, nil
+	}
+	c, err := fmp.newClientFunc(endpoint, region)
+	if err != nil {
+		return nil, err
+	}
+	fmp.clients[cacheKey] = c
+	return c, nil
+}
+
+func newS3Client(endpoint, region string) (s3Client, error) {
+	var loadOpts []func(*config.LoadOptions) error
+	if region != "" {
+		loadOpts = append(loadOpts, config.WithRegion(region))
+	}
+	cfg, err := config.LoadDefaultConfig(context.Background(), loadOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configurations to initialize an AWS SDK client, error: %w", err)
+	}
+	var clientOpts []func(*s3.Options)
+	if endpoint != "" {
+		clientOpts = append(clientOpts, func(o *s3.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+			o.UsePathStyle = true
+		})
+	}
+	return s3.NewFromConfig(cfg, clientOpts...), nil
 }
 
 func (*provider) Scheme() string {

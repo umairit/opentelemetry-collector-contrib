@@ -47,7 +47,13 @@ func (client *testClient) GetObject(_ context.Context, request *s3.GetObjectInpu
 
 // Create a provider mocking the s3 provider
 func newTestProvider(configFile string) confmap.Provider {
-	return &provider{client: &testClient{configFile: configFile}}
+	tc := &testClient{configFile: configFile}
+	return &provider{
+		clients: make(map[string]s3Client),
+		newClientFunc: func(_, _ string) (s3Client, error) {
+			return tc, nil
+		},
+	}
 }
 
 func TestFunctionalityS3URISplit(t *testing.T) {
@@ -145,6 +151,42 @@ func TestScheme(t *testing.T) {
 	fp := newTestProvider("./testdata/otel-config.yaml")
 	assert.Equal(t, "s3", fp.Scheme())
 	require.NoError(t, fp.Shutdown(t.Context()))
+}
+
+func TestClientCacheIsolation(t *testing.T) {
+	type clientKey struct{ endpoint, region string }
+	var created []clientKey
+	p := &provider{
+		clients: make(map[string]s3Client),
+		newClientFunc: func(endpoint, region string) (s3Client, error) {
+			created = append(created, clientKey{endpoint, region})
+			return &testClient{configFile: "./testdata/otel-config.yaml"}, nil
+		},
+	}
+
+	// Two AWS URIs with different regions → two separate clients, each with region baked in
+	_, err := p.Retrieve(t.Context(), "s3://bucket.s3.us-west-2.amazonaws.com/key", nil)
+	require.NoError(t, err)
+	_, err = p.Retrieve(t.Context(), "s3://bucket.s3.eu-west-1.amazonaws.com/key", nil)
+	require.NoError(t, err)
+
+	// One path-style URI → one more client
+	_, err = p.Retrieve(t.Context(), "s3://minio.example.com/bucket/key?region=ap-southeast-1", nil)
+	require.NoError(t, err)
+
+	// Repeated calls to the same URIs should hit the cache, not create new clients
+	_, err = p.Retrieve(t.Context(), "s3://bucket.s3.us-west-2.amazonaws.com/key", nil)
+	require.NoError(t, err)
+	_, err = p.Retrieve(t.Context(), "s3://minio.example.com/bucket/key?region=ap-southeast-1", nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, []clientKey{
+		{"", "us-west-2"},
+		{"", "eu-west-1"},
+		{"https://minio.example.com", "ap-southeast-1"},
+	}, created)
+	assert.Len(t, p.clients, 3)
+	require.NoError(t, p.Shutdown(t.Context()))
 }
 
 func TestFactory(t *testing.T) {
