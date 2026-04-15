@@ -4,11 +4,14 @@
 package chrony
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -78,6 +81,129 @@ func TestNew(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWithFileMountPath(t *testing.T) {
+	t.Parallel()
+
+	sockDir := t.TempDir()
+
+	c, err := New("unix://"+sockDir, 10*time.Second, WithFileMountPath(sockDir))
+	require.NoError(t, err, "Must not error when creating client")
+
+	cl, ok := c.(*client)
+	require.True(t, ok, "Must be a *client")
+	
+	assert.Contains(t, cl.localAddr, "otel-chrony-")
+	assert.Equal(t, sockDir, filepath.Dir(cl.localAddr), "Must be placed in the specified directory")
+}
+
+func newTrackingPayload(t *testing.T) []byte {
+	t.Helper()
+	type response struct {
+		ReplyHead
+		replyTrackingContent
+	}
+	resp := &response{
+		ReplyHead: ReplyHead{
+			Version: 6,
+			Status:  successfulRequest,
+			Reply:   replyTrackingCode,
+		},
+		replyTrackingContent: replyTrackingContent{
+			RefID: 100,
+			IPAddr: ipAddr{
+				IP:     [16]uint8{127, 0, 0, 1},
+				Family: ipAddrInet4,
+			},
+			Stratum: 10,
+		},
+	}
+	w := &bytes.Buffer{}
+	require.NoError(t, binary.Write(w, binary.BigEndian, resp))
+	buf := w.Bytes()
+	// Pad to 1024 bytes to match client read buffer
+	if len(buf) < 1024 {
+		buf = append(buf, make([]byte, 1024-len(buf))...)
+	}
+	return buf
+}
+
+func TestLocalAddrSocketCleanup(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping UDS test on windows")
+	}
+
+	sockDir := t.TempDir()
+
+	tracking := newTrackingPayload(t)
+
+	c, err := New("unix://"+sockDir, 10*time.Second,
+		WithFileMountPath(sockDir),
+		func(c *client) {
+			c.dialer = func(context.Context, string, string) (net.Conn, error) {
+				// Create a mock socket file to simulate dialer binding
+				_ = os.WriteFile(c.localAddr, []byte(""), 0o600)
+				conn := newMockConn(t,
+					nil,
+					func(conn net.Conn) error {
+						_, writeErr := conn.Write(tracking)
+						return writeErr
+					},
+				)
+				return conn, nil
+			}
+		},
+	)
+	require.NoError(t, err, "Must not error when creating client")
+
+	_, err = c.GetTrackingData(t.Context())
+	require.NoError(t, err, "Must not error when getting tracking data")
+
+	cl := c.(*client)
+	expectedAddr := cl.localAddr
+
+	// Call Close to trigger cleanup
+	require.NoError(t, c.Close(), "Must not error closing client")
+
+	// Verify socket file cleaned up after close
+	_, err = os.Stat(expectedAddr)
+	assert.ErrorIs(t, err, os.ErrNotExist, "Must remove local socket after Close")
+}
+
+func TestStaleSocketCleanup(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping UDS test on windows")
+	}
+
+	// Use a short temp path to stay within the Unix socket name limit (~104 bytes on macOS).
+	sockDir, err := os.MkdirTemp("/tmp", "chrony-")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+
+	// Create a real Unix socket to simulate a stale leftover.
+	stalePath := filepath.Join(sockDir, "otel-chrony-deadbeef.sock")
+	l, err := net.Listen("unix", stalePath)
+	require.NoError(t, err)
+	require.NoError(t, l.Close()) // close listener but leave the socket file
+
+	// Also create a regular file with a matching name that must NOT be deleted.
+	regularPath := filepath.Join(sockDir, "otel-chrony-cafebabe.sock")
+	require.NoError(t, os.WriteFile(regularPath, []byte("keep"), 0o600))
+
+	// Creating a client with WithFileMountPath should clean up the stale socket.
+	_, err = New("unix://"+sockDir, 10*time.Second, WithFileMountPath(sockDir))
+	require.NoError(t, err)
+
+	_, err = os.Stat(stalePath)
+	assert.ErrorIs(t, err, os.ErrNotExist, "Stale socket must be removed on startup")
+
+	_, err = os.Stat(regularPath)
+	assert.NoError(t, err, "Regular file must not be removed")
 }
 
 func TestGettingTrackingData(t *testing.T) {
