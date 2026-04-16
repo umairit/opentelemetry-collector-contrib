@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/googlecloudexporter
 
-go 1.17
+go 1.23
 
 require (
 	contrib.go.opencensus.io/exporter/stackdriver v0.13.11
@@ -16,7 +16,7 @@ require (
 	google.golang.org/api v0.79.0
 	google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3
 	google.golang.org/grpc v1.46.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -35,7 +35,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/go-cmp v0.5.8 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
