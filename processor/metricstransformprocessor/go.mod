@@ -1,17 +1,16 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/processor/metricstransformprocessor
 
-go 1.17
+go 1.23
 
 require (
 	github.com/census-instrumentation/opencensus-proto v0.3.0
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.7.0
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/opencensus v0.51.0
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.51.0
 	go.opentelemetry.io/collector/pdata v0.51.0
 	go.uber.org/zap v1.21.0
-	google.golang.org/protobuf v1.28.0
-
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
