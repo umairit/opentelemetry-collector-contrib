@@ -1,9 +1,9 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/receiver/mysqlreceiver
 
-go 1.17
+go 1.21.0
 
 require (
-	github.com/go-sql-driver/mysql v1.6.0
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/open-telemetry/opentelemetry-collector-contrib/internal/scrapertest v0.51.0
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.51.0
@@ -16,6 +16,7 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/Microsoft/go-winio v0.4.17 // indirect
 	github.com/Microsoft/hcsshim v0.8.23 // indirect
