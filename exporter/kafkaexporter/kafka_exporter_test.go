@@ -14,8 +14,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kmsg"
 	"go.opentelemetry.io/collector/client"
 	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/component/componenttest"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 	"go.opentelemetry.io/collector/exporter/exportertest"
@@ -124,6 +126,89 @@ func TestTracesPusher_ctx_Kgo(t *testing.T) {
 		}, record.Headers, "message headers mismatch")
 		assert.Nil(t, record.Key, "expected nil key for this test case")
 	})
+}
+
+func TestKafkaExporter_ComponentStatus(t *testing.T) {
+	statusChan := make(chan *componentstatus.Event, 1)
+	reporter := &kafkaTestStatusReporter{statusChan: statusChan}
+
+	t.Run("when status is OK", func(t *testing.T) {
+		config := createDefaultConfig().(*Config)
+		exp, fakeCluster := newKgoMockLogsExporter(t, *config, reporter, config.Logs.Topic)
+		t.Cleanup(func() { fakeCluster.Close() })
+
+		logs := testdata.GenerateLogs(1)
+		require.NoError(t, exp.exportData(t.Context(), logs))
+
+		select {
+		case event := <-statusChan:
+			assert.NoError(t, event.Err())
+			assert.Equal(t, componentstatus.StatusOK, event.Status())
+		default:
+			require.Fail(t, "successful export should report StatusOK")
+		}
+	})
+
+	t.Run("when broker returns topic authorization failed", func(t *testing.T) {
+		config := createDefaultConfig().(*Config)
+		topic := config.Logs.Topic
+
+		cluster, kcfg := kafkatest.NewCluster(t, kfake.SeedTopics(1, topic))
+		cluster.ControlKey(int16(kmsg.Produce), func(kreq kmsg.Request) (kmsg.Response, error, bool) {
+			preq := kreq.(*kmsg.ProduceRequest)
+			require.NotEmpty(t, preq.Topics)
+			part := kmsg.NewProduceResponseTopicPartition()
+			part.ErrorCode = kerr.SaslAuthenticationFailed.Code
+			return &kmsg.ProduceResponse{
+				Version: kreq.GetVersion(),
+				Topics: []kmsg.ProduceResponseTopic{{
+					Topic:      topic,
+					Partitions: []kmsg.ProduceResponseTopicPartition{part},
+				}},
+			}, nil, true
+		})
+
+		exp := newLogsExporter(*config, exportertest.NewNopSettings(metadata.Type))
+		exp.host = reporter
+		client, err := kafka.NewFranzSyncProducer(t.Context(), reporter, kcfg,
+			config.Producer, 1*time.Second, zap.NewNop(),
+			kgo.SeedBrokers(kcfg.Brokers...),
+			kgo.ClientID(config.ClientID),
+		)
+		require.NoError(t, err)
+		messenger, err := exp.newMessenger(reporter)
+		require.NoError(t, err)
+		exp.messenger = messenger
+		exp.producer = kafkaclient.NewFranzSyncProducer(client, config.IncludeMetadataKeys, config.RecordHeaders, config.Producer.MaxMessageBytes, reporter)
+		t.Cleanup(func() { assert.NoError(t, exp.Close(t.Context())) })
+
+		err = exp.exportData(t.Context(), testdata.GenerateLogs(1))
+		require.Error(t, err)
+		require.ErrorIs(t, err, kerr.SaslAuthenticationFailed)
+		assert.True(t, consumererror.IsPermanent(err), "expected permanent error for topic authorization failure")
+
+		select {
+		case event := <-statusChan:
+			assert.Error(t, event.Err())
+			assert.Equal(t, componentstatus.StatusRecoverableError, event.Status())
+		default:
+			require.Fail(t, "export should report StatusRecoverableError")
+		}
+
+		t.Cleanup(func() { assert.NoError(t, exp.Close(t.Context())) })
+	})
+}
+
+type kafkaTestStatusReporter struct {
+	statusChan chan *componentstatus.Event
+}
+
+func (k *kafkaTestStatusReporter) Report(event *componentstatus.Event) {
+	k.statusChan <- event
+}
+
+func (*kafkaTestStatusReporter) GetExtensions() map[component.ID]component.Component {
+	return make(map[component.ID]component.Component)
 }
 
 func TestTracesPusher_conf_err(t *testing.T) {
@@ -1283,6 +1368,8 @@ func newKgoMockProfilesExporter(t *testing.T, cfg Config, host component.Host, t
 func configureExporter[T any](tb testing.TB,
 	exp *kafkaExporter[T], cfg Config, host component.Host, topics ...string,
 ) *kfake.Cluster {
+	exp.host = host
+
 	cluster, kcfg := kafkatest.NewCluster(tb, kfake.SeedTopics(1, topics...))
 
 	// Create a kgo.Client using the broker addresses from the fake cluster.
@@ -1299,7 +1386,7 @@ func configureExporter[T any](tb testing.TB,
 	require.NoError(tb, err, "failed to create messenger for metrics")
 
 	exp.messenger = messenger
-	exp.producer = kafkaclient.NewFranzSyncProducer(client, cfg.IncludeMetadataKeys, cfg.RecordHeaders, cfg.Producer.MaxMessageBytes)
+	exp.producer = kafkaclient.NewFranzSyncProducer(client, cfg.IncludeMetadataKeys, cfg.RecordHeaders, cfg.Producer.MaxMessageBytes, host)
 
 	tb.Cleanup(func() { assert.NoError(tb, exp.Close(tb.Context())) })
 	return cluster

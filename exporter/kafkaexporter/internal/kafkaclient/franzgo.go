@@ -10,9 +10,20 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"go.opentelemetry.io/collector/component"
+	"go.opentelemetry.io/collector/component/componentstatus"
 	"go.opentelemetry.io/collector/config/configopaque"
 	"go.opentelemetry.io/collector/consumer/consumererror"
 )
+
+// isNonRecoverableKafkaError reports broker-side conditions that are not fixed
+// by retrying. Requires changing credentials, ACLs, or broker/client settings.
+// Implemented as fixed comparisons (no slice) to avoid per-error allocation on hot paths.
+func isNonRecoverableKafkaError(err error) bool {
+	return errors.Is(err, kerr.SaslAuthenticationFailed) ||
+		errors.Is(err, kerr.ClusterAuthorizationFailed) ||
+		errors.Is(err, kerr.UnsupportedVersion)
+}
 
 // MessageTooLargeError wraps a MessageTooLarge Kafka error with the actual
 // record size that caused the rejection. The size is computed the same way as
@@ -48,6 +59,7 @@ type FranzSyncProducer struct {
 	metadataKeys    []string
 	recordHeaders   configopaque.MapList
 	maxMessageBytes int
+	host            component.Host
 }
 
 // NewFranzSyncProducer Franz-go producer from a kgo.Client and a Messenger.
@@ -55,12 +67,14 @@ func NewFranzSyncProducer(client *kgo.Client,
 	metadataKeys []string,
 	recordHeaders configopaque.MapList,
 	maxMessageBytes int,
+	host component.Host,
 ) *FranzSyncProducer {
 	return &FranzSyncProducer{
 		client:          client,
 		metadataKeys:    metadataKeys,
 		recordHeaders:   recordHeaders,
 		maxMessageBytes: maxMessageBytes,
+		host:            host,
 	}
 }
 
@@ -72,6 +86,7 @@ func (p *FranzSyncProducer) ExportData(ctx context.Context, msgs Messages) error
 	var errs []error
 	for _, r := range result {
 		if r.Err == nil {
+			componentstatus.ReportStatus(p.host, componentstatus.NewEvent(componentstatus.StatusOK))
 			continue
 		}
 		var err error
@@ -81,9 +96,11 @@ func (p *FranzSyncProducer) ExportData(ctx context.Context, msgs Messages) error
 		} else {
 			err = fmt.Errorf("error exporting to topic %q: %w", r.Record.Topic, r.Err)
 		}
-		// check if its defined as a non-retriable error by franzgo
 		kgoErr := &kerr.Error{}
 		if errors.As(r.Err, &kgoErr) && !kgoErr.Retriable {
+			if isNonRecoverableKafkaError(r.Err) {
+				componentstatus.ReportStatus(p.host, componentstatus.NewRecoverableErrorEvent(err))
+			}
 			err = consumererror.NewPermanent(err)
 		}
 		errs = append(errs, err)
