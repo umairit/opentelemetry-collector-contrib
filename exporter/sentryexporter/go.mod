@@ -1,10 +1,10 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/sentryexporter
 
-go 1.17
+go 1.21
 
 require (
 	github.com/getsentry/sentry-go v0.13.0
-	github.com/google/go-cmp v0.5.8
+	github.com/google/go-cmp v0.7.0
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.51.0
 	go.opentelemetry.io/collector/pdata v0.51.0
