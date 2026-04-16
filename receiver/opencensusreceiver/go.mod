@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/receiver/opencensusreceiver
 
-go 1.17
+go 1.23
 
 require (
 	github.com/census-instrumentation/opencensus-proto v0.3.0
@@ -17,7 +17,7 @@ require (
 	go.opentelemetry.io/otel v1.7.0
 	go.opentelemetry.io/otel/trace v1.7.0
 	google.golang.org/grpc v1.46.0
-	google.golang.org/protobuf v1.28.0
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
