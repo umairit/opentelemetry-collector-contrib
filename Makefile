@@ -395,33 +395,35 @@ docker-golden:
 
 GITHUBGEN_ARGS ?= -skipgithub
 
-.PHONY: gengithub
-gengithub:
-	$(GITHUBGEN) $(GITHUBGEN_ARGS)
-
-.PHONY: gendistributions
-gendistributions:
-	$(GITHUBGEN) $(GITHUBGEN_ARGS) distributions
-
 .PHONY: gencodecov
 gencodecov:
 	cd $(SRC_ROOT)/cmd/codecovgen && go run . --base-prefix github.com/open-telemetry/opentelemetry-collector-contrib --skipped-modules '**/*test,**/examples/**,pkg/**,cmd/**,internal/**,*/encoding/**' --dir $(SRC_ROOT)
 
-.PHONY: update-codeowners
-update-codeowners: generate gengithub
-	$(MAKE) genlabels
+# githubgen targets — use go.opentelemetry.io/build-tools/githubgen
+
+.PHONY: gengithub
+gengithub: # Regenerate all GitHub-managed files (labels, CODEOWNERS, workflows); requires GITHUB_TOKEN
+	$(GITHUBGEN)
+
+.PHONY: gendistributions
+gendistributions: # Regenerate distribution configuration files
+	$(GITHUBGEN) distributions
 
 .PHONY: gencodeowners
-gencodeowners:
-	$(GITHUBGEN) $(GITHUBGEN_ARGS)
+gencodeowners: # Regenerate CODEOWNERS only; skips GitHub API calls, no token needed
+	$(GITHUBGEN) -skipgithub
 
 .PHONY: codeowners
-codeowners:
-	$(GITHUBGEN) $(GITHUBGEN_ARGS) codeowners
+codeowners: # Regenerate CODEOWNERS via githubgen subcommand
+	$(GITHUBGEN) codeowners
 
 .PHONY: generate-chloggen-components
-generate-chloggen-components:
-	$(GITHUBGEN) $(GITHUBGEN_ARGS) chloggen-components
+generate-chloggen-components: # Regenerate component list tracked by chloggen
+	$(GITHUBGEN) chloggen-components
+
+.PHONY: update-codeowners
+update-codeowners: generate gengithub # Full regen of code + GitHub files + labels; requires GITHUB_TOKEN
+	$(MAKE) genlabels
 
 FILENAME?=$(shell git branch --show-current)
 .PHONY: chlog-new
