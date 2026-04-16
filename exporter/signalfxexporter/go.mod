@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/signalfxexporter
 
-go 1.17
+go 1.25.0
 
 require (
 	github.com/gobwas/glob v0.2.3
@@ -74,7 +74,7 @@ require (
 	github.com/jaegertracing/jaeger v1.33.0 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/signalfx v0.51.0
 	go.opentelemetry.io/collector/pdata v0.51.0
-	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
+	golang.org/x/sys v0.43.0
 )
 
 replace github.com/open-telemetry/opentelemetry-collector-contrib/internal/common => ../../internal/common
