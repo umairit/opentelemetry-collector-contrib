@@ -29,6 +29,7 @@ var (
 
 	DefaultMetricFunctions    = MetricFunctions()
 	DefaultDataPointFunctions = DataPointFunctions()
+	DefaultExemplarFunctions  = ExemplarFunctions()
 )
 
 func Test_ProcessMetrics_ResourceContext(t *testing.T) {
@@ -58,7 +59,7 @@ func Test_ProcessMetrics_ResourceContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statement, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "resource", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "resource", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -99,7 +100,7 @@ func Test_ProcessMetrics_InferredResourceContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statement, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -140,7 +141,7 @@ func Test_ProcessMetrics_ScopeContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statement, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "scope", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "scope", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -181,7 +182,7 @@ func Test_ProcessMetrics_InferredScopeContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statement, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "", Statements: []string{tt.statement}}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -385,7 +386,7 @@ func Test_ProcessMetrics_MetricContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statements[0], func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "metric", Statements: tt.statements}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "metric", Statements: tt.statements}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -565,7 +566,7 @@ func Test_ProcessMetrics_InferredMetricContext(t *testing.T) {
 			}
 
 			td := constructMetrics()
-			processor, err := NewProcessor(contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1008,7 +1009,7 @@ func Test_ProcessMetrics_DataPointContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statements[0], func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: "datapoint", Statements: tt.statements}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "datapoint", Statements: tt.statements}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1456,7 +1457,7 @@ func Test_ProcessMetrics_InferredDataPointContext(t *testing.T) {
 				contextStatements = append(contextStatements, common.ContextStatements{Context: "", Statements: []string{statement}})
 			}
 
-			processor, err := NewProcessor(contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1594,7 +1595,7 @@ func Test_ProcessMetrics_MixContext(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor(tt.contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(tt.contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1634,7 +1635,7 @@ func Test_ProcessMetrics_ErrorMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.statement, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor([]common.ContextStatements{{Context: tt.context, Statements: []string{tt.statement}}}, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor([]common.ContextStatements{{Context: tt.context, Statements: []string{tt.statement}}}, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1737,7 +1738,7 @@ func Test_ProcessMetrics_StatementsErrorMode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor(tt.statements, tt.errorMode, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(tt.statements, tt.errorMode, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 			_, err = processor.ProcessMetrics(t.Context(), td)
 			if tt.wantErrorWith != "" {
@@ -1900,7 +1901,7 @@ func Test_ProcessMetrics_CacheAccess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor(tt.statements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(tt.statements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -1957,7 +1958,7 @@ func Test_ProcessMetrics_InferredContextFromConditions(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			td := constructMetrics()
-			processor, err := NewProcessor(tt.contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+			processor, err := NewProcessor(tt.contextStatements, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 			require.NoError(t, err)
 
 			_, err = processor.ProcessMetrics(t.Context(), td)
@@ -2027,7 +2028,7 @@ func Test_NewProcessor_ConditionsParse(t *testing.T) {
 		t.Run(ctx, func(t *testing.T) {
 			for _, tt := range tests {
 				t.Run(tt.name, func(t *testing.T) {
-					_, err := NewProcessor(tt.statements, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions)
+					_, err := NewProcessor(tt.statements, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
 					if tt.wantErrorWith != "" {
 						if err == nil {
 							t.Errorf("expected error containing '%s', got: <nil>", tt.wantErrorWith)
@@ -2124,7 +2125,7 @@ func Test_NewProcessor_NonDefaultFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewProcessor(tt.statements, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), tt.metricFunctions, tt.dataPointFunctions)
+			_, err := NewProcessor(tt.statements, ottl.PropagateError, componenttest.NewNopTelemetrySettings(), tt.metricFunctions, tt.dataPointFunctions, DefaultExemplarFunctions)
 			if tt.wantErrorWith != "" {
 				if err == nil {
 					t.Errorf("expected error containing '%s', got: <nil>", tt.wantErrorWith)
@@ -2264,4 +2265,120 @@ func fillMetricFive(m pmetric.Metric) {
 	dataPoint1.SetStartTimestamp(StartTimestamp)
 	dataPoint1.SetDoubleValue(3.7)
 	dataPoint1.Attributes().PutStr("attr1", "test2")
+}
+
+func constructMetricsWithExemplars() pmetric.Metrics {
+	td := pmetric.NewMetrics()
+	rm := td.ResourceMetrics().AppendEmpty()
+	rm.Resource().Attributes().PutStr("host.name", "myhost")
+	sm := rm.ScopeMetrics().AppendEmpty()
+	sm.Scope().SetName("scope")
+
+	// Gauge with exemplar
+	gauge := sm.Metrics().AppendEmpty()
+	gauge.SetName("gauge.with.exemplar")
+	gaugeDp := gauge.SetEmptyGauge().DataPoints().AppendEmpty()
+	gaugeDp.SetTimestamp(StartTimestamp)
+	gaugeDp.SetDoubleValue(1.0)
+	exemplar0 := gaugeDp.Exemplars().AppendEmpty()
+	exemplar0.SetTimestamp(StartTimestamp)
+	exemplar0.SetDoubleValue(1.0)
+	exemplar0.SetTraceID([16]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16})
+	exemplar0.SetSpanID([8]byte{1, 2, 3, 4, 5, 6, 7, 8})
+	exemplar0.FilteredAttributes().PutStr("exemplar.attr", "value1")
+
+	// Sum with exemplar
+	sum := sm.Metrics().AppendEmpty()
+	sum.SetName("sum.with.exemplar")
+	sumDp := sum.SetEmptySum().DataPoints().AppendEmpty()
+	sumDp.SetTimestamp(StartTimestamp)
+	sumDp.SetDoubleValue(2.0)
+	exemplar1 := sumDp.Exemplars().AppendEmpty()
+	exemplar1.SetTimestamp(StartTimestamp)
+	exemplar1.SetDoubleValue(2.0)
+	exemplar1.FilteredAttributes().PutStr("exemplar.attr", "value2")
+
+	// Histogram with exemplar
+	hist := sm.Metrics().AppendEmpty()
+	hist.SetName("hist.with.exemplar")
+	histDp := hist.SetEmptyHistogram().DataPoints().AppendEmpty()
+	histDp.SetTimestamp(StartTimestamp)
+	exemplar2 := histDp.Exemplars().AppendEmpty()
+	exemplar2.SetTimestamp(StartTimestamp)
+	exemplar2.SetDoubleValue(3.0)
+	exemplar2.FilteredAttributes().PutStr("exemplar.attr", "value3")
+
+	// ExponentialHistogram with exemplar
+	expHist := sm.Metrics().AppendEmpty()
+	expHist.SetName("exphist.with.exemplar")
+	expHistDp := expHist.SetEmptyExponentialHistogram().DataPoints().AppendEmpty()
+	expHistDp.SetTimestamp(StartTimestamp)
+	exemplar3 := expHistDp.Exemplars().AppendEmpty()
+	exemplar3.SetTimestamp(StartTimestamp)
+	exemplar3.SetDoubleValue(4.0)
+	exemplar3.FilteredAttributes().PutStr("exemplar.attr", "value4")
+
+	return td
+}
+
+func Test_ProcessMetrics_ExemplarContext(t *testing.T) {
+	newTimestamp := pcommon.NewTimestampFromTime(TestTime)
+
+	tests := []struct {
+		statements []string
+		want       func(pmetric.Metrics)
+	}{
+		{
+			statements: []string{fmt.Sprintf(`set(time_unix_nano, %d)`, newTimestamp.AsTime().UnixNano())},
+			want: func(td pmetric.Metrics) {
+				sm := td.ResourceMetrics().At(0).ScopeMetrics().At(0)
+				sm.Metrics().At(0).Gauge().DataPoints().At(0).Exemplars().At(0).SetTimestamp(newTimestamp)
+				sm.Metrics().At(1).Sum().DataPoints().At(0).Exemplars().At(0).SetTimestamp(newTimestamp)
+				sm.Metrics().At(2).Histogram().DataPoints().At(0).Exemplars().At(0).SetTimestamp(newTimestamp)
+				sm.Metrics().At(3).ExponentialHistogram().DataPoints().At(0).Exemplars().At(0).SetTimestamp(newTimestamp)
+			},
+		},
+		{
+			statements: []string{`set(filtered_attributes["exemplar.attr"], "updated") where metric.name == "gauge.with.exemplar"`},
+			want: func(td pmetric.Metrics) {
+				td.ResourceMetrics().At(0).ScopeMetrics().At(0).Metrics().At(0).Gauge().DataPoints().At(0).Exemplars().At(0).FilteredAttributes().PutStr("exemplar.attr", "updated")
+			},
+		},
+		{
+			statements: []string{`set(filtered_attributes["new.key"], "added") where resource.attributes["host.name"] == "myhost"`},
+			want: func(td pmetric.Metrics) {
+				sm := td.ResourceMetrics().At(0).ScopeMetrics().At(0)
+				sm.Metrics().At(0).Gauge().DataPoints().At(0).Exemplars().At(0).FilteredAttributes().PutStr("new.key", "added")
+				sm.Metrics().At(1).Sum().DataPoints().At(0).Exemplars().At(0).FilteredAttributes().PutStr("new.key", "added")
+				sm.Metrics().At(2).Histogram().DataPoints().At(0).Exemplars().At(0).FilteredAttributes().PutStr("new.key", "added")
+				sm.Metrics().At(3).ExponentialHistogram().DataPoints().At(0).Exemplars().At(0).FilteredAttributes().PutStr("new.key", "added")
+			},
+		},
+		{
+			statements: []string{`set(trace_id, TraceID(0x00000000000000000000000000000000))`},
+			want: func(td pmetric.Metrics) {
+				sm := td.ResourceMetrics().At(0).ScopeMetrics().At(0)
+				sm.Metrics().At(0).Gauge().DataPoints().At(0).Exemplars().At(0).SetTraceID(pcommon.NewTraceIDEmpty())
+				sm.Metrics().At(1).Sum().DataPoints().At(0).Exemplars().At(0).SetTraceID(pcommon.NewTraceIDEmpty())
+				sm.Metrics().At(2).Histogram().DataPoints().At(0).Exemplars().At(0).SetTraceID(pcommon.NewTraceIDEmpty())
+				sm.Metrics().At(3).ExponentialHistogram().DataPoints().At(0).Exemplars().At(0).SetTraceID(pcommon.NewTraceIDEmpty())
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.statements[0], func(t *testing.T) {
+			td := constructMetricsWithExemplars()
+			processor, err := NewProcessor([]common.ContextStatements{{Context: "exemplar", Statements: tt.statements}}, ottl.IgnoreError, componenttest.NewNopTelemetrySettings(), DefaultMetricFunctions, DefaultDataPointFunctions, DefaultExemplarFunctions)
+			require.NoError(t, err)
+
+			_, err = processor.ProcessMetrics(t.Context(), td)
+			require.NoError(t, err)
+
+			exTd := constructMetricsWithExemplars()
+			tt.want(exTd)
+
+			assert.Equal(t, exTd, td)
+		})
+	}
 }
