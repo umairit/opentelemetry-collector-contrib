@@ -3,7 +3,7 @@
 
 module github.com/open-telemetry/opentelemetry-collector-contrib/receiver/solacereceiver
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/Azure/go-amqp v1.5.1

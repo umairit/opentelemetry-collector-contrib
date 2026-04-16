@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/internal/kafka
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/IBM/sarama v1.47.0

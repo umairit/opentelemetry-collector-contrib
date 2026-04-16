@@ -1,6 +1,6 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/exporter/rabbitmqexporter
 
-go 1.25.0
+go 1.25.8
 
 require (
 	github.com/moby/moby/client v0.4.0
