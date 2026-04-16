@@ -640,12 +640,13 @@ func TestExtractionRules(t *testing.T) {
 	// Disable saving ip into k8s.pod.ip
 	c.Associations[0].Sources[0].Name = ""
 
+	jobCronSuffixMinutes := int64(27667920)
 	pod := &api_v1.Pod{
 		ObjectMeta: meta_v1.ObjectMeta{
 			Name:              "auth-service-abc12-xyz3",
 			UID:               "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
 			Namespace:         "ns1",
-			CreationTimestamp: meta_v1.Now(),
+			CreationTimestamp: meta_v1.NewTime(time.Unix(jobCronSuffixMinutes*60, 0)),
 			Labels: map[string]string{
 				"label1": "lv1",
 				"label2": "k1=v1 k5=v5 extra!",
@@ -1335,6 +1336,23 @@ func TestRemoveUnnecessaryPodData_ClonesLabelsAndAnnotations(t *testing.T) {
 	assert.Equal(t, "value", transformed.Annotations["anno"])
 }
 
+func TestRemoveUnnecessaryPodData_PreservesPodTemplateHashForDeploymentHeuristic(t *testing.T) {
+	rules := ExtractionRules{DeploymentName: true}
+	pod := &api_v1.Pod{
+		ObjectMeta: meta_v1.ObjectMeta{
+			Labels: map[string]string{
+				"pod-template-hash": "7b9f4c8d5e",
+			},
+		},
+	}
+
+	transformed := removeUnnecessaryPodData(pod, rules)
+
+	require.NotNil(t, transformed.Labels)
+	assert.Equal(t, "7b9f4c8d5e", transformed.Labels["pod-template-hash"])
+	assert.Len(t, transformed.Labels, 1)
+}
+
 func TestNamespaceExtractionRules(t *testing.T) {
 	c, _ := newTestClientWithRulesAndFilters(t, Filters{})
 
@@ -1916,6 +1934,9 @@ func TestDeploymentNameFromReplicaSet(t *testing.T) {
 			Name:      "auth-service-abc12-xyz3",
 			UID:       "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
 			Namespace: "ns1",
+			Labels: map[string]string{
+				"pod-template-hash": "66f5996c7c",
+			},
 			OwnerReferences: []meta_v1.OwnerReference{
 				{
 					APIVersion: "apps/v1",
@@ -3987,9 +4008,7 @@ func TestCronJobExtractionRules_FromJobOwner(t *testing.T) {
 					Controller: &isNotController,
 				},
 			},
-			want: map[string]string{
-				"k8s.cronjob.name": "my-cronjob",
-			},
+			want: map[string]string{},
 		},
 		{
 			name: "multiple_owners_only_controller_counts",
@@ -4014,7 +4033,7 @@ func TestCronJobExtractionRules_FromJobOwner(t *testing.T) {
 				},
 			},
 			want: map[string]string{
-				"k8s.cronjob.name": "my-cronjob",
+				"k8s.cronjob.name": "cj-controller",
 				"k8s.cronjob.uid":  "cron-uid-222",
 			},
 		},
@@ -4033,9 +4052,7 @@ func TestCronJobExtractionRules_FromJobOwner(t *testing.T) {
 					Controller: &isController,
 				},
 			},
-			want: map[string]string{
-				"k8s.cronjob.name": "my-cronjob",
-			},
+			want: map[string]string{},
 		},
 	}
 
@@ -4069,70 +4086,88 @@ func TestCronJobExtractionRules_FromJobOwner(t *testing.T) {
 
 func TestExtractDeploymentNameFromReplicaSet(t *testing.T) {
 	tests := []struct {
-		name           string
-		replicaSetName string
-		expected       string
+		name            string
+		replicaSetName  string
+		expected        string
+		podTemplateHash string
 	}{
 		{
-			name:           "valid replicaset name with pod template hash",
-			replicaSetName: "my-deployment-7b9f4c8d5e",
-			expected:       "my-deployment",
+			name:            "valid replicaset name with pod template hash",
+			replicaSetName:  "my-deployment-7b9f4c8d5e",
+			expected:        "my-deployment",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "complex deployment name with dashes",
-			replicaSetName: "my-complex-deployment-name-7b9f4c8d5e",
-			expected:       "my-complex-deployment-name",
+			name:            "complex deployment name with dashes",
+			replicaSetName:  "my-complex-deployment-name-7b9f4c8d5e",
+			expected:        "my-complex-deployment-name",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "single word deployment",
-			replicaSetName: "nginx-7b9f4c8d5e",
-			expected:       "nginx",
+			name:            "single word deployment",
+			replicaSetName:  "nginx-7b9f4c8d5e",
+			expected:        "nginx",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name without valid pod template hash",
-			replicaSetName: "my-deployment-invalidhash",
-			expected:       "",
+			name:            "replicaset name without valid pod template hash",
+			replicaSetName:  "my-deployment-invalidhash",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name with short hash",
-			replicaSetName: "my-deployment-7b9f4c",
-			expected:       "",
+			name:            "replicaset name with short hash",
+			replicaSetName:  "my-deployment-7b9f4c",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name with long hash",
-			replicaSetName: "my-deployment-7b9f4c8d5e123",
-			expected:       "",
+			name:            "replicaset name with long hash",
+			replicaSetName:  "my-deployment-7b9f4c8d5e123",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name with uppercase in hash",
-			replicaSetName: "my-deployment-7B9F4C8D5E",
-			expected:       "",
+			name:            "replicaset name with uppercase in hash",
+			replicaSetName:  "my-deployment-7B9F4C8D5E",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name with special characters in hash",
-			replicaSetName: "my-deployment-7b9f4c8d5_",
-			expected:       "",
+			name:            "replicaset name with special characters in hash",
+			replicaSetName:  "my-deployment-7b9f4c8d5_",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "empty replicaset name",
-			replicaSetName: "",
-			expected:       "",
+			name:            "empty replicaset name",
+			replicaSetName:  "",
+			expected:        "",
+			podTemplateHash: "",
 		},
 		{
-			name:           "replicaset name without dashes",
-			replicaSetName: "deployment7b9f4c8d5e",
-			expected:       "",
+			name:            "replicaset name without dashes",
+			replicaSetName:  "deployment7b9f4c8d5e",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
 		},
 		{
-			name:           "replicaset name with only hash part",
-			replicaSetName: "7b9f4c8d5e",
-			expected:       "",
+			name:            "replicaset name with only hash part",
+			replicaSetName:  "7b9f4c8d5e",
+			expected:        "",
+			podTemplateHash: "7b9f4c8d5e",
+		},
+		{
+			name:            "valid rs name but empty pod template hash",
+			replicaSetName:  "my-deployment-7b9f4c8d5e",
+			expected:        "",
+			podTemplateHash: "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractDeploymentNameFromReplicaSet(tt.replicaSetName)
+			result := extractDeploymentNameFromReplicaSet(tt.replicaSetName, tt.podTemplateHash)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -4176,8 +4211,8 @@ func TestReplicaSetInformerConditionalStart(t *testing.T) {
 			expectRun: true,
 		},
 		{
-			name:      "start informer if deployment name is requested",
-			rules:     ExtractionRules{DeploymentName: true},
+			name:      "start informer if deployment name is requested without heuristic",
+			rules:     ExtractionRules{DeploymentName: true, DeploymentNameFromReplicaSet: false},
 			expectRun: true,
 		},
 		{
@@ -4245,7 +4280,7 @@ func TestDeploymentNameFromReplicaSetFeature(t *testing.T) {
 			name:                                "flag enabled - replicaset not in cache",
 			deploymentNameFromReplicaSetEnabled: true,
 			replicaSetInCache:                   false,
-			deploymentInRS:                      false,
+			deploymentInRS:                      true,
 			replicaSetName:                      "my-deployment-7b9f4c8d5e",
 			expectedDeploymentName:              "my-deployment",
 		},
@@ -4255,7 +4290,7 @@ func TestDeploymentNameFromReplicaSetFeature(t *testing.T) {
 			replicaSetInCache:                   true,
 			deploymentInRS:                      false,
 			replicaSetName:                      "my-deployment-7b9f4c8d5e",
-			expectedDeploymentName:              "my-deployment",
+			expectedDeploymentName:              "",
 		},
 		{
 			name:                                "flag enabled - replicaset in cache with deployment (should prefer existing)",
@@ -4326,6 +4361,12 @@ func TestDeploymentNameFromReplicaSetFeature(t *testing.T) {
 					PodIP: "1.2.3.4",
 				},
 			}
+			if tt.deploymentInRS {
+				// Pod template hash only exists if the pod is managed by a deployment
+				pod.Labels = map[string]string{
+					"pod-template-hash": "7b9f4c8d5e",
+				}
+			}
 
 			// Extract attributes
 			attributes := c.extractPodAttributes(pod)
@@ -4337,64 +4378,8 @@ func TestDeploymentNameFromReplicaSetFeature(t *testing.T) {
 				assert.Equal(t, tt.expectedDeploymentName, deploymentName)
 			} else {
 				_, exists := attributes["k8s.deployment.name"]
-				assert.False(t, exists, "Expected no deployment name to be extracted")
+				assert.False(t, exists, "Expected no deployment name to be extracted, got: %s", attributes["k8s.deployment.name"])
 			}
-		})
-	}
-}
-
-func TestDeploymentHashSuffixPattern(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected bool
-	}{
-		{
-			name:     "valid pod template hash",
-			input:    "7b9f4c8d5e",
-			expected: true,
-		},
-		{
-			name:     "valid all digits",
-			input:    "1234567890",
-			expected: true,
-		},
-		{
-			name:     "valid all letters",
-			input:    "abcdefghij",
-			expected: true,
-		},
-		{
-			name:     "too short",
-			input:    "7b9f4c8d5",
-			expected: false,
-		},
-		{
-			name:     "too long",
-			input:    "7b9f4c8d5e1",
-			expected: false,
-		},
-		{
-			name:     "contains uppercase",
-			input:    "7B9F4C8D5E",
-			expected: false,
-		},
-		{
-			name:     "contains special character",
-			input:    "7b9f4c8d5-",
-			expected: false,
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := deploymentHashSuffixPattern.MatchString(tt.input)
-			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -4639,7 +4624,8 @@ func TestCreateRestConfigFailure(t *testing.T) {
 
 	// Set a rule to enable deployment monitoring
 	rules := ExtractionRules{
-		DeploymentName: true, // This ensures that the replicasetInformer is created
+		DeploymentName:               true,
+		DeploymentNameFromReplicaSet: false,
 	}
 
 	c, err := New(
