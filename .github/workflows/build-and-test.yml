@@ -24,7 +24,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -60,14 +60,14 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
             ~/go/pkg/mod
           key: go-cache-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
       - name: Cache Lint Build
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: ~/.cache/go-build
           key: go-lint-build-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
@@ -89,7 +89,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -130,14 +130,14 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
             ~/go/pkg/mod
           key: go-cache-${{ runner.os }}-${{ hashFiles('**/go.sum') }}
       - name: Cache Test Build
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: ~/.cache/go-build
           key: go-test-build-${{ runner.os }}-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
@@ -159,7 +159,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -184,7 +184,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -208,7 +208,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -250,7 +250,7 @@ jobs:
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -322,7 +322,7 @@ jobs:
           path: ./bin/
       - name: Cache Wix
         id: wix-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             "C:\Program Files (x86)\WiX Toolset v3.11"
@@ -379,7 +379,7 @@ jobs:
           mkdir bin/ dist/
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
@@ -440,7 +440,7 @@ jobs:
           mkdir bin/ dist/
       - name: Cache Go
         id: go-cache
-        uses: actions/cache@v3
+        uses: actions/cache@v5
         with:
           path: |
             ~/go/bin
