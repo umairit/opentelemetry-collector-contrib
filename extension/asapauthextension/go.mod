@@ -1,9 +1,9 @@
 module github.com/open-telemetry/opentelemetry-collector-contrib/extension/asapauthextension
 
-go 1.17
+go 1.26.0
 
 require (
-	bitbucket.org/atlassian/go-asap/v2 v2.6.0
+	bitbucket.org/atlassian/go-asap/v2 v2.17.3
 	github.com/SermoDigital/jose v0.9.2-0.20161205224733-f6df55f235c2
 	github.com/stretchr/testify v1.7.1
 	go.opentelemetry.io/collector v0.51.0
@@ -12,11 +12,13 @@ require (
 )
 
 require (
+	github.com/aws/aws-sdk-go v1.55.7 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/google/uuid v1.3.0 // indirect
+	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
